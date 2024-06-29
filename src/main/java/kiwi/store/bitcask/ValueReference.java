@@ -1,12 +1,14 @@
 package kiwi.store.bitcask;
 
+import kiwi.common.Bytes;
 import kiwi.store.bitcask.log.LogSegment;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
 public record ValueReference(LogSegment segment, long offset, int valueSize) {
-    public ByteBuffer read() throws IOException {
-        return segment.read(offset, valueSize);
+    public Bytes get() throws IOException {
+        ByteBuffer buffer = segment.read(offset, valueSize);
+        return Bytes.wrap(buffer.array());
     }
 }

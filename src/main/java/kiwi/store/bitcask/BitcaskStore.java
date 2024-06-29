@@ -1,32 +1,31 @@
 package kiwi.store.bitcask;
 
+import kiwi.common.Bytes;
 import kiwi.error.KiwiException;
 import kiwi.error.KiwiReadException;
 import kiwi.store.KeyValueStore;
-import kiwi.store.Utils;
 import kiwi.store.bitcask.log.LogSegment;
 import kiwi.store.bitcask.log.LogSegmentNameGenerator;
 import kiwi.store.bitcask.log.Record;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.*;
 import java.util.stream.Stream;
 
-public class BitcaskStore implements KeyValueStore<byte[], byte[]> {
+public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
 
     // TODO: Roll active segment when it reaches a certain size or time threshold
 
-    private final Map<Integer, ValueReference> keydir;
+    private final Map<Bytes, ValueReference> keydir;
     private final LogSegment activeSegment;
     private final Clock clock;
     private final LogSegmentNameGenerator generator;
 
     BitcaskStore(
-            Map<Integer, ValueReference> keydir,
+            Map<Bytes, ValueReference> keydir,
             LogSegment activeSegment,
             Clock clock) {
         this.keydir = keydir;
@@ -40,7 +39,7 @@ public class BitcaskStore implements KeyValueStore<byte[], byte[]> {
     }
 
     @Override
-    public void put(byte[] key, byte[] value) {
+    public void put(Bytes key, Bytes value) {
         Objects.requireNonNull(key, "key cannot be null");
         Record record = createRecord(key, value);
         int written = activeSegment.append(record);
@@ -51,34 +50,33 @@ public class BitcaskStore implements KeyValueStore<byte[], byte[]> {
         }
     }
 
-    private Record createRecord(byte[] key, byte[] value) {
+    private Record createRecord(Bytes key, Bytes value) {
         Objects.requireNonNull(key, "key cannot be null");
         long timestamp = clock.millis();
-        return new Record(ByteBuffer.wrap(key), ByteBuffer.wrap(value), timestamp);
+        return new Record(key, value, timestamp);
     }
 
-    private void updateKeydir(byte[] key, byte[] value) {
-        int keyHash = Utils.hashCode(key);
-        if (Arrays.equals(value, Record.TOMBSTONE)) {
-            keydir.remove(keyHash);
+    private void updateKeydir(Bytes key, Bytes value) {
+        if (value.equals(Record.TOMBSTONE)) {
+            keydir.remove(key);
         } else {
-            long offset = activeSegment.position() - value.length;
+            long offset = activeSegment.position() - value.length();
             // TODO: Avoid creating read-only segment for each put request.
-            ValueReference valueRef = new ValueReference(activeSegment.asReadOnly(), offset, value.length);
-            keydir.put(keyHash, valueRef);
+            ValueReference valueRef = new ValueReference(activeSegment.asReadOnly(), offset, value.length());
+            keydir.put(key, valueRef);
         }
     }
 
     @Override
-    public Optional<byte[]> get(byte[] key) {
+    public Optional<Bytes> get(Bytes key) {
         Objects.requireNonNull(key, "key cannot be null");
-        ValueReference valueRef = keydir.get(Utils.hashCode(key));
+        ValueReference valueRef = keydir.get(key);
         if (valueRef == null) {
             return Optional.empty();
         }
         try {
-            byte[] valueBytes = valueRef.read().array();
-            if (Arrays.equals(valueBytes, Record.TOMBSTONE)) {
+            Bytes valueBytes = valueRef.get();
+            if (valueBytes.equals(Record.TOMBSTONE)) {
                 return Optional.empty();
             }
             return Optional.of(valueBytes);
@@ -88,15 +86,15 @@ public class BitcaskStore implements KeyValueStore<byte[], byte[]> {
     }
 
     @Override
-    public void delete(byte[] key) {
+    public void delete(Bytes key) {
         Objects.requireNonNull(key, "key cannot be null");
         put(key, Record.TOMBSTONE);
     }
 
     @Override
-    public boolean contains(byte[] key) {
+    public boolean contains(Bytes key) {
         Objects.requireNonNull(key, "key cannot be null");
-        return keydir.containsKey(Utils.hashCode(key));
+        return keydir.containsKey(key);
     }
 
     @Override
@@ -117,7 +115,7 @@ public class BitcaskStore implements KeyValueStore<byte[], byte[]> {
                     .sorted()
                     .toList();
 
-            Map<Integer, ValueReference> keydir = new HashMap<>();
+            Map<Bytes, ValueReference> keydir = new HashMap<>();
             for (Path segmentPath : segmentPaths) {
                 LogSegment segment = LogSegment.open(segmentPath, true);
                 keydir.putAll(segment.buildKeydir());

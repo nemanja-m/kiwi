@@ -1,9 +1,9 @@
 package kiwi.store.bitcask.log;
 
+import kiwi.common.Bytes;
 import kiwi.error.KiwiException;
 import kiwi.error.KiwiReadException;
 import kiwi.error.KiwiWriteException;
-import kiwi.store.Utils;
 import kiwi.store.bitcask.ValueReference;
 
 import java.io.IOException;
@@ -75,11 +75,11 @@ public class LogSegment {
         return open(file, true);
     }
 
-    public Map<Integer, ValueReference> buildKeydir() throws KiwiReadException {
+    public Map<Bytes, ValueReference> buildKeydir() throws KiwiReadException {
         try {
             channel.position(0);
 
-            Map<Integer, ValueReference> keydir = new HashMap<>();
+            Map<Bytes, ValueReference> keydir = new HashMap<>();
             ByteBuffer buffer = ByteBuffer.allocate(Record.OVERHEAD_BYTES);
             while (channel.read(buffer) != -1) {
                 buffer.flip();
@@ -102,13 +102,13 @@ public class LogSegment {
                 // Skip the value.
                 channel.position(valuePosition + valueSize);
 
-                int keyHash = Utils.hashCode(keyBuffer.array());
+                Bytes key = Bytes.wrap(keyBuffer.array());
                 if (valueSize > 0) {
                     ValueReference valueRef = new ValueReference(this, valuePosition, valueSize);
-                    keydir.put(keyHash, valueRef);
+                    keydir.put(key, valueRef);
                 } else {
                     // Delete records on tombstone markers.
-                    keydir.put(keyHash, null);
+                    keydir.put(key, null);
                 }
             }
             return keydir;

@@ -1,11 +1,11 @@
 package kiwi;
 
+import kiwi.common.Bytes;
 import kiwi.store.KiwiStore;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.Optional;
 
@@ -30,7 +30,7 @@ public class Kiwi {
                             System.out.println("Usage: PUT key value");
                             continue;
                         }
-                        store.put(parts[1].getBytes(StandardCharsets.UTF_8), parts[2].getBytes(StandardCharsets.UTF_8));
+                        store.put(Bytes.wrap(parts[1]), Bytes.wrap(parts[2]));
                         break;
 
                     case "GET":
@@ -38,12 +38,12 @@ public class Kiwi {
                             System.out.println("Usage: GET key");
                             continue;
                         }
-                        Optional<byte[]> maybeValue = store.get(parts[1].getBytes(StandardCharsets.UTF_8));
+                        Optional<Bytes> maybeValue = store.get(Bytes.wrap(parts[1]));
                         if (maybeValue.isEmpty()) {
                             System.out.println("Key not found");
                             continue;
                         } else {
-                            System.out.println(new String(maybeValue.get(), StandardCharsets.UTF_8));
+                            System.out.println(maybeValue.get());
                             break;
                         }
 
@@ -52,7 +52,7 @@ public class Kiwi {
                             System.out.println("Usage: DEL key");
                             continue;
                         }
-                        store.delete(parts[1].getBytes(StandardCharsets.UTF_8));
+                        store.delete(Bytes.wrap(parts[1]));
                         break;
 
                     case "SIZE":

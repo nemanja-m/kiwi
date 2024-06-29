@@ -1,12 +1,12 @@
 package kiwi.store.bitcask;
 
+import kiwi.common.Bytes;
 import kiwi.common.KeyValue;
 import kiwi.store.bitcask.log.Record;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -22,57 +22,57 @@ class BitcaskStoreTest {
     @Test
     void testPutAndGet() {
         BitcaskStore store = BitcaskStore.open(root);
-        store.put("k1".getBytes(), "v1".getBytes());
-        store.put("k2".getBytes(), "v2".getBytes());
-        store.put("k3".getBytes(), "v3".getBytes());
-        store.put("k1".getBytes(), "v1-updated".getBytes());
+        store.put(Bytes.wrap("k1"), Bytes.wrap("v1"));
+        store.put(Bytes.wrap("k2"), Bytes.wrap("v2"));
+        store.put(Bytes.wrap("k3"), Bytes.wrap("v3"));
+        store.put(Bytes.wrap("k1"), Bytes.wrap("v1-updated"));
 
         assertEquals(3, store.size());
-        assertArrayEquals("v1-updated".getBytes(), store.get("k1".getBytes()).orElseThrow());
-        assertArrayEquals("v2".getBytes(), store.get("k2".getBytes()).orElseThrow());
-        assertArrayEquals("v3".getBytes(), store.get("k3".getBytes()).orElseThrow());
+        assertEquals(Bytes.wrap("v1-updated"), store.get(Bytes.wrap("k1")).orElseThrow());
+        assertEquals(Bytes.wrap("v2"), store.get(Bytes.wrap("k2")).orElseThrow());
+        assertEquals(Bytes.wrap("v3"), store.get(Bytes.wrap("k3")).orElseThrow());
     }
 
     @Test
     void testGetNonExistentKey() {
         BitcaskStore store = BitcaskStore.open(root);
-        assertTrue(store.get("k1".getBytes()).isEmpty());
+        assertTrue(store.get(Bytes.wrap("k1")).isEmpty());
     }
 
     @Test
     void testDelete() {
         BitcaskStore store = BitcaskStore.open(root);
-        store.put("k1".getBytes(), "v1".getBytes());
-        store.put("k2".getBytes(), "v2".getBytes());
-        store.put("k3".getBytes(), "v3".getBytes());
-        store.delete("k1".getBytes());
+        store.put(Bytes.wrap("k1"), Bytes.wrap("v1"));
+        store.put(Bytes.wrap("k2"), Bytes.wrap("v2"));
+        store.put(Bytes.wrap("k3"), Bytes.wrap("v3"));
+        store.delete(Bytes.wrap("k1"));
 
         assertEquals(2, store.size());
-        assertTrue(store.get("k1".getBytes()).isEmpty());
-        assertArrayEquals("v2".getBytes(), store.get("k2".getBytes()).orElseThrow());
-        assertArrayEquals("v3".getBytes(), store.get("k3".getBytes()).orElseThrow());
+        assertFalse(store.get(Bytes.wrap("k1")).isPresent());
+        assertEquals(Bytes.wrap("v2"), store.get(Bytes.wrap("k2")).orElseThrow());
+        assertEquals(Bytes.wrap("v3"), store.get(Bytes.wrap("k3")).orElseThrow());
     }
 
     @Test
     void testContains() {
         BitcaskStore store = BitcaskStore.open(root);
-        store.put("k1".getBytes(), "v1".getBytes());
-        store.put("k2".getBytes(), "v2".getBytes());
-        store.put("k3".getBytes(), "v3".getBytes());
+        store.put(Bytes.wrap("k1"), Bytes.wrap("v1"));
+        store.put(Bytes.wrap("k2"), Bytes.wrap("v2"));
+        store.put(Bytes.wrap("k3"), Bytes.wrap("v3"));
 
-        assertTrue(store.contains("k1".getBytes()));
-        assertTrue(store.contains("k2".getBytes()));
-        assertTrue(store.contains("k3".getBytes()));
-        assertFalse(store.contains("k4".getBytes()));
+        assertTrue(store.contains(Bytes.wrap("k1")));
+        assertTrue(store.contains(Bytes.wrap("k2")));
+        assertTrue(store.contains(Bytes.wrap("k3")));
+        assertFalse(store.contains(Bytes.wrap("k4")));
     }
 
     @Test
     void testSize() {
         BitcaskStore store = BitcaskStore.open(root);
-        store.put("k1".getBytes(), "v1".getBytes());
-        store.put("k2".getBytes(), "v2".getBytes());
-        store.put("k3".getBytes(), "v3".getBytes());
-        store.delete("k1".getBytes());
+        store.put(Bytes.wrap("k1"), Bytes.wrap("v1"));
+        store.put(Bytes.wrap("k2"), Bytes.wrap("v2"));
+        store.put(Bytes.wrap("k3"), Bytes.wrap("v3"));
+        store.delete(Bytes.wrap("k1"));
 
         assertEquals(2, store.size());
     }
@@ -95,18 +95,18 @@ class BitcaskStoreTest {
         BitcaskStore store = BitcaskStore.rebuild(root);
 
         assertEquals(3, store.size());
-        assertArrayEquals("v1-new".getBytes(), store.get("k1".getBytes()).orElseThrow());
-        assertArrayEquals("v2-updated".getBytes(), store.get("k2".getBytes()).orElseThrow());
-        assertTrue(store.get("k3".getBytes()).isEmpty());
-        assertArrayEquals("v4".getBytes(), store.get("k4".getBytes()).orElseThrow());
+        assertEquals(Bytes.wrap("v1-new"), store.get(Bytes.wrap("k1")).orElseThrow());
+        assertEquals(Bytes.wrap("v2-updated"), store.get(Bytes.wrap("k2")).orElseThrow());
+        assertTrue(store.get(Bytes.wrap("k3")).isEmpty());
+        assertEquals(Bytes.wrap("v4"), store.get(Bytes.wrap("k4")).orElseThrow());
     }
 
     void prepareSegment(String name, List<KeyValue<String, String>> entries) throws IOException {
         try (FileChannel channel = FileChannel.open(root.resolve(name), StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
             entries.forEach((entry) -> {
                 try {
-                    ByteBuffer key = ByteBuffer.wrap(entry.key().getBytes());
-                    ByteBuffer value = ByteBuffer.wrap(entry.value() == null ? Record.TOMBSTONE : entry.value().getBytes());
+                    Bytes key = Bytes.wrap(entry.key());
+                    Bytes value = entry.value() == null ? Record.TOMBSTONE : Bytes.wrap(entry.value());
                     channel.write(new Record(key, value, 0).toByteBuffer());
                 } catch (IOException ex) {
                     fail(ex);

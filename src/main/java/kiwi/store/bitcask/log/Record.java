@@ -1,5 +1,7 @@
 package kiwi.store.bitcask.log;
 
+import kiwi.common.Bytes;
+
 import java.nio.ByteBuffer;
 import java.util.zip.CRC32;
 
@@ -13,19 +15,19 @@ public class Record {
     /**
      * Tombstone marker for deleted records.
      */
-    public static final byte[] TOMBSTONE = new byte[0];
+    public static final Bytes TOMBSTONE = Bytes.EMPTY;
 
     private final int keySize;
-    private final ByteBuffer key;
+    private final Bytes key;
     private final int valueSize;
-    private final ByteBuffer value;
+    private final Bytes value;
     private final long timestamp;
 
-    public Record(ByteBuffer key, ByteBuffer value, long timestamp) {
+    public Record(Bytes key, Bytes value, long timestamp) {
         this.key = key;
-        this.keySize = key.capacity();
+        this.keySize = key.length();
         this.value = value;
-        this.valueSize = value.capacity();
+        this.valueSize = value.length();
         this.timestamp = timestamp;
     }
 
@@ -39,8 +41,8 @@ public class Record {
         buffer.putLong(timestamp);
         buffer.putInt(keySize);
         buffer.putInt(valueSize);
-        buffer.put(key);
-        buffer.put(value);
+        buffer.put(key.get());
+        buffer.put(value.get());
 
         CRC32 crc = new CRC32();
         crc.update(buffer.array(), Long.BYTES, capacity() - Long.BYTES);

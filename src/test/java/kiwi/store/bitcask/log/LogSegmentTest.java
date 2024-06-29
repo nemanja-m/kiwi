@@ -1,5 +1,6 @@
 package kiwi.store.bitcask.log;
 
+import kiwi.common.Bytes;
 import kiwi.error.KiwiReadException;
 import kiwi.error.KiwiWriteException;
 import kiwi.store.bitcask.ValueReference;
@@ -7,12 +8,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -38,7 +37,7 @@ class LogSegmentTest {
         LogSegment segment = LogSegment.open(file, true);
 
         assertThrows(KiwiWriteException.class, () -> {
-            Record record = new Record(ByteBuffer.wrap("k".getBytes()), ByteBuffer.wrap("v".getBytes()), 0);
+            Record record = new Record(Bytes.wrap("k"), Bytes.wrap("v"), 0);
             segment.append(record);
         });
     }
@@ -47,7 +46,7 @@ class LogSegmentTest {
     void testOpenAsAppendOnlyThrowsOnRead() {
         LogSegment segment = LogSegment.open(root.resolve("001.log"));
 
-        Record record = new Record(ByteBuffer.wrap("k".getBytes()), ByteBuffer.wrap("v".getBytes()), 0);
+        Record record = new Record(Bytes.wrap("k"), Bytes.wrap("v"), 0);
         int written = segment.append(record);
 
         assertEquals(Record.OVERHEAD_BYTES + 2, written);
@@ -66,7 +65,7 @@ class LogSegmentTest {
         LogSegment segment = LogSegment.open(root.resolve("001.log"));
         assertEquals(0, segment.position());
 
-        Record record = new Record(ByteBuffer.wrap("k".getBytes()), ByteBuffer.wrap("v".getBytes()), 0);
+        Record record = new Record(Bytes.wrap("k"), Bytes.wrap("v"), 0);
         int written = segment.append(record);
         assertEquals(written, segment.position());
     }
@@ -75,10 +74,10 @@ class LogSegmentTest {
     void testBuildKeydir() throws IOException {
         try (FileChannel channel = FileChannel.open(root.resolve("001.log"), StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
             List.of(
-                    new Record(ByteBuffer.wrap("k1".getBytes()), ByteBuffer.wrap("v1".getBytes()), 0),
-                    new Record(ByteBuffer.wrap("k2".getBytes()), ByteBuffer.wrap("v2".getBytes()), 0),
-                    new Record(ByteBuffer.wrap("k1".getBytes()), ByteBuffer.wrap("v11".getBytes()), 0),
-                    new Record(ByteBuffer.wrap("k2".getBytes()), ByteBuffer.wrap(Record.TOMBSTONE), 0)
+                    new Record(Bytes.wrap("k1"), Bytes.wrap("v1"), 0),
+                    new Record(Bytes.wrap("k2"), Bytes.wrap("v2"), 0),
+                    new Record(Bytes.wrap("k1"), Bytes.wrap("v11"), 0),
+                    new Record(Bytes.wrap("k2"), Bytes.EMPTY, 0)
             ).forEach((record) -> {
                 try {
                     channel.write(record.toByteBuffer());
@@ -89,14 +88,11 @@ class LogSegmentTest {
         }
 
         LogSegment segment = LogSegment.open(root.resolve("001.log"), true);
-        Map<Integer, ValueReference> keydir = segment.buildKeydir();
+        Map<Bytes, ValueReference> keydir = segment.buildKeydir();
 
-        assertEquals(1, keydir.size());
-        assertFalse(keydir.containsKey("k2".hashCode()));
-
-        ValueReference valueRef = keydir.get(Arrays.hashCode("k1".getBytes()));
-        String value = new String(valueRef.read().array());
-        assertEquals("v11", value);
+        assertEquals(2, keydir.size());
+        assertEquals("v11", keydir.get(Bytes.wrap("k1")).get().toString());
+        assertNull(keydir.get(Bytes.wrap("k2")));
     }
 
 }
