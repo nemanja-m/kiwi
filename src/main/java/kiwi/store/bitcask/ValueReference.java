@@ -11,4 +11,8 @@ public record ValueReference(LogSegment segment, long offset, int valueSize, lon
         ByteBuffer buffer = segment.read(offset, valueSize);
         return Bytes.wrap(buffer.array());
     }
+
+    public boolean isExpired(long now) {
+        return ttl > 0 && now > ttl;
+    }
 }

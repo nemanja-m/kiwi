@@ -76,7 +76,8 @@ class LogSegmentTest {
                     Record.of(Bytes.wrap("k1"), Bytes.wrap("v1")),
                     Record.of(Bytes.wrap("k2"), Bytes.wrap("v2")),
                     Record.of(Bytes.wrap("k1"), Bytes.wrap("v11")),
-                    Record.of(Bytes.wrap("k2"), Bytes.EMPTY)
+                    Record.of(Bytes.wrap("k2"), Bytes.EMPTY),
+                    Record.of(Bytes.wrap("k3"), Bytes.wrap("v3"), 0L, 1L) // Expired.
             ).forEach((record) -> {
                 try {
                     channel.write(record.toByteBuffer());
@@ -89,9 +90,10 @@ class LogSegmentTest {
         LogSegment segment = LogSegment.open(root.resolve("001.log"), true);
         Map<Bytes, ValueReference> keydir = segment.buildKeydir();
 
-        assertEquals(2, keydir.size());
+        assertEquals(3, keydir.size());
         assertEquals("v11", keydir.get(Bytes.wrap("k1")).get().toString());
         assertNull(keydir.get(Bytes.wrap("k2")));
+        assertNull(keydir.get(Bytes.wrap("k3")));
     }
 
 }

@@ -36,6 +36,19 @@ class KiwiStoreTest {
     }
 
     @Test
+    void testPutAndGetWithTTL() {
+        Bytes key = Bytes.wrap("key");
+        Bytes value = Bytes.wrap("value");
+
+        store.put(key, value, System.currentTimeMillis() - 30 * 1000);
+
+        assertEquals(1, store.size());
+        Optional<Bytes> retrievedValue = store.get(key);
+        assertTrue(retrievedValue.isEmpty());
+        assertEquals(0, store.size());
+    }
+
+    @Test
     void testGetNonExistentKey() {
         Bytes key = Bytes.wrap("key");
         Optional<Bytes> retrievedValue = store.get(key);

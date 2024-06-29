@@ -34,6 +34,21 @@ class BitcaskStoreTest {
     }
 
     @Test
+    void testPutAndGetWithTTL() {
+        BitcaskStore store = BitcaskStore.open(root);
+        store.put(Bytes.wrap("k1"), Bytes.wrap("v1"));
+        // Expired because TTL is in the past.
+        store.put(Bytes.wrap("k2"), Bytes.wrap("v2"), System.currentTimeMillis() - 30 * 1000);
+
+        assertEquals(2, store.size());
+        assertEquals(Bytes.wrap("v1"), store.get(Bytes.wrap("k1")).orElseThrow());
+        assertTrue(store.get(Bytes.wrap("k2")).isEmpty());
+
+        // Expired record is removed from keydir on read.
+        assertEquals(1, store.size());
+    }
+
+    @Test
     void testGetNonExistentKey() {
         BitcaskStore store = BitcaskStore.open(root);
         assertTrue(store.get(Bytes.wrap("k1")).isEmpty());

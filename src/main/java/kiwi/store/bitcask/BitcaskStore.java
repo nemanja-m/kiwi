@@ -40,23 +40,28 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
 
     @Override
     public void put(Bytes key, Bytes value) {
+        put(key, value, 0L);
+    }
+
+    @Override
+    public void put(Bytes key, Bytes value, long ttl) {
         Objects.requireNonNull(key, "key cannot be null");
-        Record record = Record.of(key, value, clock.millis());
+        Record record = Record.of(key, value, clock.millis(), ttl);
         int written = activeSegment.append(record);
         if (written > 0) {
-            updateKeydir(key, value);
+            updateKeydir(key, value, ttl);
         } else {
             throw new KiwiException("Failed to write to segment");
         }
     }
 
-    private void updateKeydir(Bytes key, Bytes value) {
+    private void updateKeydir(Bytes key, Bytes value, long ttl) {
         if (value.equals(Record.TOMBSTONE)) {
             keydir.remove(key);
         } else {
             long offset = activeSegment.position() - value.size();
             // TODO: Avoid creating read-only segment for each put request.
-            ValueReference valueRef = new ValueReference(activeSegment.asReadOnly(), offset, value.size(), 0L);
+            ValueReference valueRef = new ValueReference(activeSegment.asReadOnly(), offset, value.size(), ttl);
             keydir.put(key, valueRef);
         }
     }
@@ -66,6 +71,10 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         Objects.requireNonNull(key, "key cannot be null");
         ValueReference valueRef = keydir.get(key);
         if (valueRef == null) {
+            return Optional.empty();
+        }
+        if (valueRef.isExpired(clock.millis())) {
+            keydir.remove(key);
             return Optional.empty();
         }
         try {

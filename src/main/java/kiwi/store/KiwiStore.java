@@ -23,6 +23,11 @@ public class KiwiStore implements KeyValueStore<Bytes, Bytes> {
     }
 
     @Override
+    public void put(Bytes key, Bytes value, long ttl) {
+        store.put(key, value, ttl);
+    }
+
+    @Override
     public Optional<Bytes> get(Bytes key) {
         return store.get(key);
     }
