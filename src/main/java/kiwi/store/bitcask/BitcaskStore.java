@@ -41,7 +41,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
     @Override
     public void put(Bytes key, Bytes value) {
         Objects.requireNonNull(key, "key cannot be null");
-        Record record = createRecord(key, value);
+        Record record = Record.of(key, value, clock.millis());
         int written = activeSegment.append(record);
         if (written > 0) {
             updateKeydir(key, value);
@@ -50,19 +50,13 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         }
     }
 
-    private Record createRecord(Bytes key, Bytes value) {
-        Objects.requireNonNull(key, "key cannot be null");
-        long timestamp = clock.millis();
-        return new Record(key, value, timestamp);
-    }
-
     private void updateKeydir(Bytes key, Bytes value) {
         if (value.equals(Record.TOMBSTONE)) {
             keydir.remove(key);
         } else {
-            long offset = activeSegment.position() - value.length();
+            long offset = activeSegment.position() - value.size();
             // TODO: Avoid creating read-only segment for each put request.
-            ValueReference valueRef = new ValueReference(activeSegment.asReadOnly(), offset, value.length());
+            ValueReference valueRef = new ValueReference(activeSegment.asReadOnly(), offset, value.size(), 0L);
             keydir.put(key, valueRef);
         }
     }

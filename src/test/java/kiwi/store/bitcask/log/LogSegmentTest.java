@@ -37,7 +37,7 @@ class LogSegmentTest {
         LogSegment segment = LogSegment.open(file, true);
 
         assertThrows(KiwiWriteException.class, () -> {
-            Record record = new Record(Bytes.wrap("k"), Bytes.wrap("v"), 0);
+            Record record = Record.of(Bytes.wrap("k"), Bytes.wrap("v"));
             segment.append(record);
         });
     }
@@ -46,11 +46,10 @@ class LogSegmentTest {
     void testOpenAsAppendOnlyThrowsOnRead() {
         LogSegment segment = LogSegment.open(root.resolve("001.log"));
 
-        Record record = new Record(Bytes.wrap("k"), Bytes.wrap("v"), 0);
+        Record record = Record.of(Bytes.wrap("k"), Bytes.wrap("v"));
         int written = segment.append(record);
 
-        assertEquals(Record.OVERHEAD_BYTES + 2, written);
-
+        assertEquals(record.size(), written);
         assertThrows(KiwiReadException.class, () -> segment.read(0, 1));
     }
 
@@ -65,7 +64,7 @@ class LogSegmentTest {
         LogSegment segment = LogSegment.open(root.resolve("001.log"));
         assertEquals(0, segment.position());
 
-        Record record = new Record(Bytes.wrap("k"), Bytes.wrap("v"), 0);
+        Record record = Record.of(Bytes.wrap("k"), Bytes.wrap("v"));
         int written = segment.append(record);
         assertEquals(written, segment.position());
     }
@@ -74,10 +73,10 @@ class LogSegmentTest {
     void testBuildKeydir() throws IOException {
         try (FileChannel channel = FileChannel.open(root.resolve("001.log"), StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
             List.of(
-                    new Record(Bytes.wrap("k1"), Bytes.wrap("v1"), 0),
-                    new Record(Bytes.wrap("k2"), Bytes.wrap("v2"), 0),
-                    new Record(Bytes.wrap("k1"), Bytes.wrap("v11"), 0),
-                    new Record(Bytes.wrap("k2"), Bytes.EMPTY, 0)
+                    Record.of(Bytes.wrap("k1"), Bytes.wrap("v1")),
+                    Record.of(Bytes.wrap("k2"), Bytes.wrap("v2")),
+                    Record.of(Bytes.wrap("k1"), Bytes.wrap("v11")),
+                    Record.of(Bytes.wrap("k2"), Bytes.EMPTY)
             ).forEach((record) -> {
                 try {
                     channel.write(record.toByteBuffer());

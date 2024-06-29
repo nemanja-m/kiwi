@@ -107,7 +107,7 @@ class BitcaskStoreTest {
                 try {
                     Bytes key = Bytes.wrap(entry.key());
                     Bytes value = entry.value() == null ? Record.TOMBSTONE : Bytes.wrap(entry.value());
-                    channel.write(new Record(key, value, 0).toByteBuffer());
+                    channel.write(Record.of(key, value, 0).toByteBuffer());
                 } catch (IOException ex) {
                     fail(ex);
                 }

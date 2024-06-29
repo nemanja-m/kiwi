@@ -4,6 +4,7 @@ import kiwi.common.Bytes;
 import kiwi.error.KiwiException;
 import kiwi.error.KiwiReadException;
 import kiwi.error.KiwiWriteException;
+import kiwi.store.bitcask.Header;
 import kiwi.store.bitcask.ValueReference;
 
 import java.io.IOException;
@@ -80,15 +81,15 @@ public class LogSegment {
             channel.position(0);
 
             Map<Bytes, ValueReference> keydir = new HashMap<>();
-            ByteBuffer buffer = ByteBuffer.allocate(Record.OVERHEAD_BYTES);
+            ByteBuffer buffer = ByteBuffer.allocate(Header.BYTES);
             while (channel.read(buffer) != -1) {
                 buffer.flip();
 
-                // Skip the checksum.
-                buffer.position(buffer.position() + Long.BYTES);
+                // Skip the checksum and timestamp.
+                // Checksum validation is done during background compaction.
+                buffer.position(buffer.position() + 2 * Long.BYTES);
 
-                // TODO: Skip timestamp.
-                long timestamp = buffer.getLong();
+                long ttl = buffer.getLong();
                 int keySize = buffer.getInt();
                 int valueSize = buffer.getInt();
 
@@ -102,12 +103,17 @@ public class LogSegment {
                 // Skip the value.
                 channel.position(valuePosition + valueSize);
 
+                // Skip the record if TTL has expired.
+                boolean expired = ttl > 0 && System.currentTimeMillis() > ttl;
+
                 Bytes key = Bytes.wrap(keyBuffer.array());
-                if (valueSize > 0) {
-                    ValueReference valueRef = new ValueReference(this, valuePosition, valueSize);
+                if (valueSize > 0 && !expired) {
+                    ValueReference valueRef = new ValueReference(this, valuePosition, valueSize, ttl);
                     keydir.put(key, valueRef);
                 } else {
-                    // Delete records on tombstone markers.
+                    // TODO: Add DEBUG log for skipped records.
+
+                    // Skip expired records and tombstone records.
                     keydir.put(key, null);
                 }
             }

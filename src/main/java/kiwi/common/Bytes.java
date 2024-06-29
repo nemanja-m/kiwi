@@ -28,7 +28,7 @@ public class Bytes {
         return this.bytes;
     }
 
-    public int length() {
+    public int size() {
         return bytes.length;
     }
 
