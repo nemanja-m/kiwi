@@ -1,14 +1,18 @@
-package kiwi.store.log;
+package kiwi.store.bitcask.log;
 
 import java.nio.ByteBuffer;
 import java.util.zip.CRC32;
 
 public class Record {
 
-    /** CRC + timestamp + key size + value size. */
+    /**
+     * CRC + timestamp + key size + value size.
+     */
     public static final int OVERHEAD_BYTES = 2 * (Long.BYTES + Integer.BYTES);
 
-    /** Tombstone marker for deleted records. */
+    /**
+     * Tombstone marker for deleted records.
+     */
     public static final byte[] TOMBSTONE = new byte[0];
 
     private final int keySize;

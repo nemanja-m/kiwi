@@ -1,6 +1,6 @@
 package kiwi.store;
 
-import kiwi.store.log.LogSegmentNameGenerator;
+import kiwi.store.bitcask.log.LogSegmentNameGenerator;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Paths;

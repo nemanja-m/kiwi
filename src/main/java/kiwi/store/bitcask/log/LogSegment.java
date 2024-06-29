@@ -1,8 +1,8 @@
-package kiwi.store.log;
+package kiwi.store.bitcask.log;
 
 import kiwi.error.KiwiException;
 import kiwi.store.Utils;
-import kiwi.store.ValueMetadata;
+import kiwi.store.bitcask.ValueMetadata;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
