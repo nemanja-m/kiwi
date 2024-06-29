@@ -1,6 +1,13 @@
 plugins {
-    java
+    application
     idea
+}
+
+group = "kiwi"
+version = "0.1.0-SNAPSHOT"
+
+application {
+    mainClass = "kiwi.Kiwi"
 }
 
 java {
@@ -12,9 +19,12 @@ repositories {
 }
 
 dependencies {
-    testImplementation(platform("org.junit:junit-bom:5.10.3"))
-    testImplementation("org.junit.jupiter:junit-jupiter")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    implementation(libs.slf4j)
+    implementation(libs.logback)
+
+    testImplementation(platform(libs.junit.bom))
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform)
 }
 
 tasks.test {
@@ -23,6 +33,3 @@ tasks.test {
         events("passed", "skipped", "failed")
     }
 }
-
-group = "kiwi"
-version = "0.1.0-SNAPSHOT"

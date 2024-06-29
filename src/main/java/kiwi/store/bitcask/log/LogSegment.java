@@ -6,6 +6,8 @@ import kiwi.error.KiwiReadException;
 import kiwi.error.KiwiWriteException;
 import kiwi.store.bitcask.Header;
 import kiwi.store.bitcask.ValueReference;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -16,6 +18,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class LogSegment {
+    private static final Logger logger = LoggerFactory.getLogger(LogSegment.class);
+
     private final Path file;
     private final FileChannel channel;
 
@@ -77,6 +81,8 @@ public class LogSegment {
     }
 
     public Map<Bytes, ValueReference> buildKeydir() throws KiwiReadException {
+        logger.info("Building keydir from log segment {}", file.toString());
+
         try {
             channel.position(0);
 
@@ -111,15 +117,13 @@ public class LogSegment {
                     ValueReference valueRef = new ValueReference(this, valuePosition, valueSize, ttl);
                     keydir.put(key, valueRef);
                 } else {
-                    // TODO: Add DEBUG log for skipped records.
-
                     // Skip expired records and tombstone records.
                     keydir.put(key, null);
                 }
             }
             return keydir;
         } catch (IOException | IllegalStateException ex) {
-            throw new KiwiReadException("Failed to build hash table from log segment " + file.toString(), ex);
+            throw new KiwiReadException("Failed to build hash table from log segment " + file, ex);
         }
     }
 
