@@ -6,12 +6,13 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.util.Optional;
 
 public class Kiwi {
 
     public static void main(String[] args) {
-        KiwiStore store = KiwiStore.open("./db");
+        KiwiStore store = KiwiStore.open(Paths.get("./db"));
 
         System.out.println("\n-------");
         System.out.println("KiwiDB");

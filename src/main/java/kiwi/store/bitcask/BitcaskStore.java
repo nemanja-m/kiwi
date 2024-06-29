@@ -1,6 +1,7 @@
 package kiwi.store.bitcask;
 
 import kiwi.error.KiwiException;
+import kiwi.error.KiwiReadException;
 import kiwi.store.KeyValueStore;
 import kiwi.store.Utils;
 import kiwi.store.bitcask.log.LogSegment;
@@ -11,64 +12,72 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.Clock;
 import java.util.*;
 import java.util.stream.Stream;
 
-public class Bitcask implements KeyValueStore<byte[], byte[]> {
+public class BitcaskStore implements KeyValueStore<byte[], byte[]> {
 
     // TODO: Roll active segment when it reaches a certain size or time threshold
 
-    private final Map<Integer, ValueMetadata> keydir;
+    private final Map<Integer, ValueReference> keydir;
     private final LogSegment activeSegment;
-    private final LogSegmentNameGenerator logSegmentNameGenerator;
     private final Clock clock;
+    private final LogSegmentNameGenerator generator;
 
-    Bitcask(
-            Map<Integer, ValueMetadata> keydir,
+    BitcaskStore(
+            Map<Integer, ValueReference> keydir,
             LogSegment activeSegment,
-            LogSegmentNameGenerator logSegmentNameGenerator,
             Clock clock) {
         this.keydir = keydir;
         this.activeSegment = activeSegment;
-        this.logSegmentNameGenerator = logSegmentNameGenerator;
         this.clock = clock;
+        this.generator = LogSegmentNameGenerator.from(activeSegment);
     }
 
-    public static Bitcask open(String root) {
-        return open(Paths.get(root));
-    }
-
-    public static Bitcask open(Path root) {
+    public static BitcaskStore open(Path root) {
         return rebuild(root);
     }
 
     @Override
     public void put(byte[] key, byte[] value) {
         Objects.requireNonNull(key, "key cannot be null");
-        long timestamp = clock.millis();
-        Record record = new Record(ByteBuffer.wrap(key), ByteBuffer.wrap(value), timestamp);
+        Record record = createRecord(key, value);
         int written = activeSegment.append(record);
         if (written > 0) {
-            long offset = activeSegment.position() - value.length;
-            // TODO: Avoid creating read-only segment for each put request.
-            ValueMetadata metadata = new ValueMetadata(activeSegment.readOnly(), offset, value.length, timestamp);
-            keydir.put(Utils.hashCode(key), metadata);
+            updateKeydir(key, value);
         } else {
             throw new KiwiException("Failed to write to segment");
+        }
+    }
+
+    private Record createRecord(byte[] key, byte[] value) {
+        Objects.requireNonNull(key, "key cannot be null");
+        long timestamp = clock.millis();
+        return new Record(ByteBuffer.wrap(key), ByteBuffer.wrap(value), timestamp);
+    }
+
+    private void updateKeydir(byte[] key, byte[] value) {
+        int keyHash = Utils.hashCode(key);
+        if (Arrays.equals(value, Record.TOMBSTONE)) {
+            keydir.remove(keyHash);
+        } else {
+            long offset = activeSegment.position() - value.length;
+            // TODO: Avoid creating read-only segment for each put request.
+            ValueReference valueRef = new ValueReference(activeSegment.asReadOnly(), offset, value.length);
+            keydir.put(keyHash, valueRef);
         }
     }
 
     @Override
     public Optional<byte[]> get(byte[] key) {
         Objects.requireNonNull(key, "key cannot be null");
-        ValueMetadata value = keydir.get(Utils.hashCode(key));
-        if (value == null) {
+        ValueReference valueRef = keydir.get(Utils.hashCode(key));
+        if (valueRef == null) {
             return Optional.empty();
         }
         try {
-            byte[] valueBytes = value.read().array();
+            byte[] valueBytes = valueRef.read().array();
             if (Arrays.equals(valueBytes, Record.TOMBSTONE)) {
                 return Optional.empty();
             }
@@ -95,7 +104,7 @@ public class Bitcask implements KeyValueStore<byte[], byte[]> {
         return keydir.size();
     }
 
-    static Bitcask rebuild(Path logDir) {
+    static BitcaskStore rebuild(Path logDir) {
         try {
             Files.createDirectories(logDir);
         } catch (IOException ex) {
@@ -108,26 +117,26 @@ public class Bitcask implements KeyValueStore<byte[], byte[]> {
                     .sorted()
                     .toList();
 
-            Map<Integer, ValueMetadata> keydir = new HashMap<>();
+            Map<Integer, ValueReference> keydir = new HashMap<>();
             for (Path segmentPath : segmentPaths) {
-                LogSegment segment = LogSegment.open(segmentPath, false);
-                keydir.putAll(segment.hashTable());
+                LogSegment segment = LogSegment.open(segmentPath, true);
+                keydir.putAll(segment.buildKeydir());
             }
+
+            // Remove tombstones.
+            keydir.values().removeIf(Objects::isNull);
 
             Path activeSegmentPath;
-            LogSegmentNameGenerator logSegmentNameGenerator;
             if (segmentPaths.isEmpty()) {
-                logSegmentNameGenerator = new LogSegmentNameGenerator();
-                activeSegmentPath = logSegmentNameGenerator.next(logDir);
+                activeSegmentPath = new LogSegmentNameGenerator().next(logDir);
             } else {
                 activeSegmentPath = segmentPaths.getLast();
-                logSegmentNameGenerator = LogSegmentNameGenerator.from(activeSegmentPath);
             }
-            LogSegment activeSegment = LogSegment.open(activeSegmentPath, true);
+            LogSegment activeSegment = LogSegment.open(activeSegmentPath);
 
-            return new Bitcask(keydir, activeSegment, logSegmentNameGenerator, Clock.systemUTC());
+            return new BitcaskStore(keydir, activeSegment, Clock.systemUTC());
         } catch (IOException ex) {
-            throw new KiwiException("Failed to read log directory " + logDir, ex);
+            throw new KiwiReadException("Failed to read log directory " + logDir, ex);
         }
     }
 }

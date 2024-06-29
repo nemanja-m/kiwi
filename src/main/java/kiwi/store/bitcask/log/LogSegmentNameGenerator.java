@@ -14,9 +14,8 @@ public class LogSegmentNameGenerator {
         this.counter = counter;
     }
 
-    public static LogSegmentNameGenerator from(Path segmentPath) {
-        String fileName = segmentPath.getFileName().toString().replace(".log", "");
-        long counter = Long.parseLong(fileName) + 1;
+    public static LogSegmentNameGenerator from(LogSegment segment) {
+        long counter = Long.parseLong(segment.name()) + 1;
         return new LogSegmentNameGenerator(counter);
     }
 

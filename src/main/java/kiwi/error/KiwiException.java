@@ -13,8 +13,4 @@ public class KiwiException extends RuntimeException {
     public KiwiException(Throwable cause) {
         super(cause);
     }
-
-    public KiwiException() {
-        super();
-    }
 }

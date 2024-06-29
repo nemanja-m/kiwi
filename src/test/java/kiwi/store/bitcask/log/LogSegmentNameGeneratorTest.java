@@ -1,13 +1,12 @@
-package kiwi.store;
+package kiwi.store.bitcask.log;
 
-import kiwi.store.bitcask.log.LogSegmentNameGenerator;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Paths;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-class LogSegmentNameGeneratorTests {
+class LogSegmentNameGeneratorTest {
 
     @Test
     void testNextReturnsIncreasingFileNames() {
@@ -31,8 +30,8 @@ class LogSegmentNameGeneratorTests {
 
     @Test
     void testFromReturnsGeneratorWithCounterFromFileName() {
-        LogSegmentNameGenerator logSegmentNameGenerator =
-                LogSegmentNameGenerator.from(Paths.get("./00000000000000000000.log"));
+        LogSegment segment = new LogSegment(Paths.get("./00000000000000000000.log"), null);
+        LogSegmentNameGenerator logSegmentNameGenerator = LogSegmentNameGenerator.from(segment);
 
         assertEquals(
                 "./00000000000000000001.log", logSegmentNameGenerator.next().toString());
