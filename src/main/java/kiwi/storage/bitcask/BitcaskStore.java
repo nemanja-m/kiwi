@@ -21,10 +21,8 @@ import java.util.stream.Stream;
 public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
     private static final Logger logger = LoggerFactory.getLogger(LogSegment.class);
 
-    // TODO: Roll active segment when it reaches a certain size or time threshold
-
     private final Map<Bytes, ValueReference> keydir;
-    private final LogSegment activeSegment;
+    private LogSegment activeSegment;
     private final Clock clock;
     private final LogSegmentNameGenerator generator;
     private final long logSegmentBytes;
@@ -51,7 +49,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
     }
 
     public static BitcaskStore open(Options.Storage options) {
-        return new Builder(options.getRoot()).withLogSegmentBytes(options.getSegmentSize()).build();
+        return new Builder(options.getLogDir()).withLogSegmentBytes(options.getSegmentSize()).build();
     }
 
     @Override
@@ -86,12 +84,14 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
 
     private void maybeRollSegment() {
         if (shouldRoll()) {
-            LogSegment newSegment = LogSegment.open(generator.next());
+            activeSegment.close();
+            activeSegment = LogSegment.open(generator.next());
+            logger.info("Opened new log segment {}", activeSegment.name());
         }
     }
 
     private boolean shouldRoll() {
-        return activeSegment.size() > logSegmentBytes;
+        return activeSegment.size() >= logSegmentBytes;
     }
 
     @Override
@@ -133,6 +133,10 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         return keydir.size();
     }
 
+    public static Builder Builder(Path logDir) {
+        return new Builder(logDir);
+    }
+
     public static class Builder {
 
         private Map<Bytes, ValueReference> keydir;
@@ -140,7 +144,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         private long logSegmentBytes;
         private Clock clock = Clock.systemUTC();
 
-        public Builder(Path logDir) {
+        Builder(Path logDir) {
             init(logDir);
         }
 

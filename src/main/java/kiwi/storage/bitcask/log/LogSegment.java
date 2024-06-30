@@ -88,6 +88,15 @@ public class LogSegment {
         return file.getParent();
     }
 
+    public void close() {
+        try {
+            channel.force(true);
+            channel.close();
+        } catch (IOException ex) {
+            logger.error("Failed to close log segment {}", file.toString(), ex);
+        }
+    }
+
     public LogSegment asReadOnly() {
         return open(file, true);
     }

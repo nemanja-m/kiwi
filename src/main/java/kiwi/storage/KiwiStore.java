@@ -18,8 +18,8 @@ public class KiwiStore implements KeyValueStore<Bytes, Bytes> {
         return open(Options.DEFAULTS.getStorageOptions());
     }
 
-    public static KiwiStore open(Path root) {
-        return new KiwiStore(BitcaskStore.open(root));
+    public static KiwiStore open(Path logDir) {
+        return new KiwiStore(BitcaskStore.open(logDir));
     }
 
     public static KiwiStore open(Options.Storage options) {

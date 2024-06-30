@@ -8,9 +8,12 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -116,6 +119,36 @@ class BitcaskStoreTest {
         assertEquals(Bytes.wrap("v4"), store.get(Bytes.wrap("k4")).orElseThrow());
     }
 
+    @Test
+    void testRollActiveSegment() throws IOException {
+        // Active segment has 2 * (Header.BYTES (32) + 2) = 68 bytes.
+        prepareSegment("00000000000000000000.log", List.of(
+                KeyValue.of("a", "1"),
+                KeyValue.of("b", "2")
+        ));
+
+        List<Path> files = listLogFiles();
+        assertEquals(1, files.size());
+
+        Path expectedFirst = Paths.get("00000000000000000000.log");
+        Path expectedSecond = Paths.get("00000000000000000001.log");
+
+        assertEquals(expectedFirst, files.getFirst().getFileName());
+
+        // Next put operation should roll new segment because active segment is full.
+        BitcaskStore store = BitcaskStore.Builder(root)
+                .withLogSegmentBytes(100)
+                .build();
+
+        // PUT adds 32 + 4 = 36 bytes to the active segment and triggers roll.
+        store.put(Bytes.wrap("c"), Bytes.wrap("3"));
+
+        files = listLogFiles();
+        assertEquals(2, files.size());
+        assertEquals(expectedFirst, files.getFirst().getFileName());
+        assertEquals(expectedSecond, files.getLast().getFileName());
+    }
+
     void prepareSegment(String name, List<KeyValue<String, String>> entries) throws IOException {
         try (FileChannel channel = FileChannel.open(root.resolve(name), StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
             entries.forEach((entry) -> {
@@ -127,6 +160,16 @@ class BitcaskStoreTest {
                     fail(ex);
                 }
             });
+        }
+    }
+
+    List<Path> listLogFiles() throws IOException {
+        try (Stream<Path> stream = Files.walk(root)) {
+            return stream
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().endsWith(".log"))
+                    .sorted()
+                    .toList();
         }
     }
 }

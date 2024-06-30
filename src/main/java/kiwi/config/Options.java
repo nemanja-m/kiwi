@@ -15,16 +15,16 @@ public class Options {
     }
 
     public static class Storage {
-        private final Path root;
+        private final Path logDir;
         private final long segmentSize;
 
         public Storage(Config config) {
-            this.root = Path.of(config.getString("log.dir"));
+            this.logDir = Path.of(config.getString("log.dir"));
             this.segmentSize = config.getLong("log.segment.bytes");
         }
 
-        public Path getRoot() {
-            return root;
+        public Path getLogDir() {
+            return logDir;
         }
 
         public long getSegmentSize() {
