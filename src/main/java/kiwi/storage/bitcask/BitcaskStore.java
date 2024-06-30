@@ -1,12 +1,13 @@
-package kiwi.store.bitcask;
+package kiwi.storage.bitcask;
 
 import kiwi.common.Bytes;
+import kiwi.config.Options;
 import kiwi.error.KiwiException;
 import kiwi.error.KiwiReadException;
-import kiwi.store.KeyValueStore;
-import kiwi.store.bitcask.log.LogSegment;
-import kiwi.store.bitcask.log.LogSegmentNameGenerator;
-import kiwi.store.bitcask.log.Record;
+import kiwi.storage.KeyValueStore;
+import kiwi.storage.bitcask.log.LogSegment;
+import kiwi.storage.bitcask.log.LogSegmentNameGenerator;
+import kiwi.storage.bitcask.log.Record;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -23,19 +24,31 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
     private final LogSegment activeSegment;
     private final Clock clock;
     private final LogSegmentNameGenerator generator;
+    private final long logSegmentBytes;
 
-    BitcaskStore(
+    private BitcaskStore(
             Map<Bytes, ValueReference> keydir,
             LogSegment activeSegment,
+            long logSegmentBytes,
             Clock clock) {
         this.keydir = keydir;
         this.activeSegment = activeSegment;
+        this.logSegmentBytes = logSegmentBytes;
         this.clock = clock;
         this.generator = LogSegmentNameGenerator.from(activeSegment);
     }
 
-    public static BitcaskStore open(Path root) {
-        return rebuild(root);
+    public static BitcaskStore open() {
+        return open(Options.DEFAULTS.getStorageOptions());
+    }
+
+    public static BitcaskStore open(Path logDir) {
+        Options.Storage options = Options.DEFAULTS.getStorageOptions();
+        return new Builder(logDir).withLogSegmentBytes(options.getSegmentSize()).build();
+    }
+
+    public static BitcaskStore open(Options.Storage options) {
+        return new Builder(options.getRoot()).withLogSegmentBytes(options.getSegmentSize()).build();
     }
 
     @Override
@@ -105,39 +118,63 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         return keydir.size();
     }
 
-    static BitcaskStore rebuild(Path logDir) {
-        try {
-            Files.createDirectories(logDir);
-        } catch (IOException ex) {
-            throw new KiwiException("Failed to create log directory " + logDir, ex);
+    public static class Builder {
+
+        private Map<Bytes, ValueReference> keydir;
+        private LogSegment activeSegment;
+        private long logSegmentBytes;
+        private Clock clock = Clock.systemUTC();
+
+        public Builder(Path logDir) {
+            init(logDir);
         }
 
-        try (Stream<Path> paths = Files.walk(logDir)) {
-            List<Path> segmentPaths = paths.filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().endsWith(".log"))
-                    .sorted()
-                    .toList();
+        public Builder withLogSegmentBytes(long logSegmentBytes) {
+            this.logSegmentBytes = logSegmentBytes;
+            return this;
+        }
 
-            Map<Bytes, ValueReference> keydir = new HashMap<>();
-            for (Path segmentPath : segmentPaths) {
-                LogSegment segment = LogSegment.open(segmentPath, true);
-                keydir.putAll(segment.buildKeydir());
+        public Builder withClock(Clock clock) {
+            this.clock = clock;
+            return this;
+        }
+
+        public BitcaskStore build() {
+            return new BitcaskStore(keydir, activeSegment, logSegmentBytes, clock);
+        }
+
+        private void init(Path logDir) {
+            try {
+                Files.createDirectories(logDir);
+            } catch (IOException ex) {
+                throw new KiwiException("Failed to create log directory " + logDir, ex);
             }
 
-            // Remove tombstones.
-            keydir.values().removeIf(Objects::isNull);
+            try (Stream<Path> paths = Files.walk(logDir)) {
+                List<Path> segmentPaths = paths.filter(Files::isRegularFile)
+                        .filter(path -> path.getFileName().toString().endsWith(".log"))
+                        .sorted()
+                        .toList();
 
-            Path activeSegmentPath;
-            if (segmentPaths.isEmpty()) {
-                activeSegmentPath = new LogSegmentNameGenerator().next(logDir);
-            } else {
-                activeSegmentPath = segmentPaths.getLast();
+                keydir = new HashMap<>();
+                for (Path segmentPath : segmentPaths) {
+                    LogSegment segment = LogSegment.open(segmentPath, true);
+                    keydir.putAll(segment.buildKeydir());
+                }
+                // Remove tombstones.
+                keydir.values().removeIf(Objects::isNull);
+
+                Path activeSegmentPath;
+                if (segmentPaths.isEmpty()) {
+                    activeSegmentPath = new LogSegmentNameGenerator().next(logDir);
+                } else {
+                    activeSegmentPath = segmentPaths.getLast();
+                }
+                this.activeSegment = LogSegment.open(activeSegmentPath);
+            } catch (IOException ex) {
+                throw new KiwiReadException("Failed to read log directory " + logDir, ex);
             }
-            LogSegment activeSegment = LogSegment.open(activeSegmentPath);
-
-            return new BitcaskStore(keydir, activeSegment, Clock.systemUTC());
-        } catch (IOException ex) {
-            throw new KiwiReadException("Failed to read log directory " + logDir, ex);
         }
     }
+
 }

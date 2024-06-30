@@ -1,4 +1,4 @@
-package kiwi.store;
+package kiwi.storage;
 
 import kiwi.common.Bytes;
 

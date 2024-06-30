@@ -1,9 +1,9 @@
-package kiwi.store.bitcask.log;
+package kiwi.storage.bitcask.log;
 
 import kiwi.common.Bytes;
 import kiwi.error.KiwiReadException;
 import kiwi.error.KiwiWriteException;
-import kiwi.store.bitcask.ValueReference;
+import kiwi.storage.bitcask.ValueReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

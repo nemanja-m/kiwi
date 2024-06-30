@@ -1,7 +1,7 @@
 package kiwi;
 
 import kiwi.common.Bytes;
-import kiwi.store.KiwiStore;
+import kiwi.storage.KiwiStore;
 
 import java.io.BufferedReader;
 import java.io.IOException;

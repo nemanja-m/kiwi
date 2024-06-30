@@ -1,4 +1,4 @@
-package kiwi.store.bitcask;
+package kiwi.storage.bitcask;
 
 import java.nio.ByteBuffer;
 

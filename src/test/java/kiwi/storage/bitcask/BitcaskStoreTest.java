@@ -1,8 +1,8 @@
-package kiwi.store.bitcask;
+package kiwi.storage.bitcask;
 
 import kiwi.common.Bytes;
 import kiwi.common.KeyValue;
-import kiwi.store.bitcask.log.Record;
+import kiwi.storage.bitcask.log.Record;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -107,7 +107,7 @@ class BitcaskStoreTest {
                 KeyValue.of("k3", null),
                 KeyValue.of("k4", "v4")
         ));
-        BitcaskStore store = BitcaskStore.rebuild(root);
+        BitcaskStore store = BitcaskStore.open(root);
 
         assertEquals(3, store.size());
         assertEquals(Bytes.wrap("v1-new"), store.get(Bytes.wrap("k1")).orElseThrow());

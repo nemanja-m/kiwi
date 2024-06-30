@@ -21,6 +21,7 @@ repositories {
 dependencies {
     implementation(libs.slf4j)
     implementation(libs.logback)
+    implementation(libs.typesafe.config)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)

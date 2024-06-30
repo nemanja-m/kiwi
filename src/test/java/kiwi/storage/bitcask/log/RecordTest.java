@@ -1,7 +1,7 @@
-package kiwi.store.bitcask.log;
+package kiwi.storage.bitcask.log;
 
 import kiwi.common.Bytes;
-import kiwi.store.bitcask.Header;
+import kiwi.storage.bitcask.Header;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;

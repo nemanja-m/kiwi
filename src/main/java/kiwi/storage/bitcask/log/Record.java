@@ -1,8 +1,8 @@
-package kiwi.store.bitcask.log;
+package kiwi.storage.bitcask.log;
 
 import kiwi.common.Bytes;
-import kiwi.store.Utils;
-import kiwi.store.bitcask.Header;
+import kiwi.storage.Utils;
+import kiwi.storage.bitcask.Header;
 
 import java.nio.ByteBuffer;
 

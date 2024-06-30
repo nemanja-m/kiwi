@@ -1,4 +1,4 @@
-package kiwi.store.bitcask.log;
+package kiwi.storage.bitcask.log;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;

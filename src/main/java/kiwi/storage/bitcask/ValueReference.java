@@ -1,7 +1,7 @@
-package kiwi.store.bitcask;
+package kiwi.storage.bitcask;
 
 import kiwi.common.Bytes;
-import kiwi.store.bitcask.log.LogSegment;
+import kiwi.storage.bitcask.log.LogSegment;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;

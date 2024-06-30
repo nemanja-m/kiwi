@@ -1,4 +1,4 @@
-package kiwi.store.bitcask.log;
+package kiwi.storage.bitcask.log;
 
 import org.junit.jupiter.api.Test;
 

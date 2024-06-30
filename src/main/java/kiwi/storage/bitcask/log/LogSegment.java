@@ -1,11 +1,11 @@
-package kiwi.store.bitcask.log;
+package kiwi.storage.bitcask.log;
 
 import kiwi.common.Bytes;
 import kiwi.error.KiwiException;
 import kiwi.error.KiwiReadException;
 import kiwi.error.KiwiWriteException;
-import kiwi.store.bitcask.Header;
-import kiwi.store.bitcask.ValueReference;
+import kiwi.storage.bitcask.Header;
+import kiwi.storage.bitcask.ValueReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
