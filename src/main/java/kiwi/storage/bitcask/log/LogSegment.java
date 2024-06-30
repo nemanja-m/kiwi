@@ -72,8 +72,20 @@ public class LogSegment {
         }
     }
 
+    public long size() throws KiwiReadException {
+        try {
+            return channel.size();
+        } catch (IOException ex) {
+            throw new KiwiReadException("Failed to get size of log segment " + file.toString(), ex);
+        }
+    }
+
     public String name() {
         return file.getFileName().toString().replace(".log", "");
+    }
+
+    public Path baseDir() {
+        return file.getParent();
     }
 
     public LogSegment asReadOnly() {

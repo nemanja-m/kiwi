@@ -8,6 +8,8 @@ import kiwi.storage.KeyValueStore;
 import kiwi.storage.bitcask.log.LogSegment;
 import kiwi.storage.bitcask.log.LogSegmentNameGenerator;
 import kiwi.storage.bitcask.log.Record;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -17,6 +19,7 @@ import java.util.*;
 import java.util.stream.Stream;
 
 public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
+    private static final Logger logger = LoggerFactory.getLogger(LogSegment.class);
 
     // TODO: Roll active segment when it reaches a certain size or time threshold
 
@@ -66,6 +69,8 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         } else {
             throw new KiwiException("Failed to write to segment");
         }
+
+        maybeRollSegment();
     }
 
     private void updateKeydir(Bytes key, Bytes value, long ttl) {
@@ -77,6 +82,16 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
             ValueReference valueRef = new ValueReference(activeSegment.asReadOnly(), offset, value.size(), ttl);
             keydir.put(key, valueRef);
         }
+    }
+
+    private void maybeRollSegment() {
+        if (shouldRoll()) {
+            LogSegment newSegment = LogSegment.open(generator.next());
+        }
+    }
+
+    private boolean shouldRoll() {
+        return activeSegment.size() > logSegmentBytes;
     }
 
     @Override
@@ -166,7 +181,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
 
                 Path activeSegmentPath;
                 if (segmentPaths.isEmpty()) {
-                    activeSegmentPath = new LogSegmentNameGenerator().next(logDir);
+                    activeSegmentPath = new LogSegmentNameGenerator(logDir).next();
                 } else {
                     activeSegmentPath = segmentPaths.getLast();
                 }

@@ -30,6 +30,12 @@ class LogSegmentTest {
     }
 
     @Test
+    void testBaseDir() {
+        LogSegment segment = LogSegment.open(root.resolve("001.log"));
+        assertEquals(root, segment.baseDir());
+    }
+
+    @Test
     void testOpenAsReadOnlyThrowsOnAppend() throws IOException {
         Path file = root.resolve("001.log");
         Files.createFile(file);

@@ -30,12 +30,12 @@ class LogSegmentNameGeneratorTest {
 
     @Test
     void testFromReturnsGeneratorWithCounterFromFileName() {
-        LogSegment segment = new LogSegment(Paths.get("./00000000000000000000.log"), null);
+        LogSegment segment = new LogSegment(Paths.get("/tmp/log/00000000000000000000.log"), null);
         LogSegmentNameGenerator logSegmentNameGenerator = LogSegmentNameGenerator.from(segment);
 
         assertEquals(
-                "./00000000000000000001.log", logSegmentNameGenerator.next().toString());
+                "/tmp/log/00000000000000000001.log", logSegmentNameGenerator.next().toString());
         assertEquals(
-                "./00000000000000000002.log", logSegmentNameGenerator.next().toString());
+                "/tmp/log/00000000000000000002.log", logSegmentNameGenerator.next().toString());
     }
 }
