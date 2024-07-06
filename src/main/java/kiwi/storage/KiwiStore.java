@@ -15,7 +15,7 @@ public class KiwiStore implements KeyValueStore<Bytes, Bytes> {
     }
 
     public static KiwiStore open() {
-        return open(Options.DEFAULTS.getStorageOptions());
+        return open(Options.defaults.storage);
     }
 
     public static KiwiStore open(Path logDir) {

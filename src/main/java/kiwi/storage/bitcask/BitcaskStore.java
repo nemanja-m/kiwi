@@ -40,16 +40,15 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
     }
 
     public static BitcaskStore open() {
-        return open(Options.DEFAULTS.getStorageOptions());
+        return open(Options.defaults.storage);
     }
 
     public static BitcaskStore open(Path logDir) {
-        Options.Storage options = Options.DEFAULTS.getStorageOptions();
-        return new Builder(logDir).withLogSegmentBytes(options.getSegmentSize()).build();
+        return new Builder(logDir).withLogSegmentBytes(Options.defaults.storage.log.segmentBytes).build();
     }
 
     public static BitcaskStore open(Options.Storage options) {
-        return new Builder(options.getLogDir()).withLogSegmentBytes(options.getSegmentSize()).build();
+        return new Builder(options.log.dir).withLogSegmentBytes(options.log.segmentBytes).build();
     }
 
     @Override

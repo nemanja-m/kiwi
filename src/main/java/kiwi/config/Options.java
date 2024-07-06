@@ -4,37 +4,47 @@ import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 
 import java.nio.file.Path;
+import java.time.Duration;
 
 public class Options {
     private static final Config config = ConfigFactory.load();
 
-    public static final Options DEFAULTS = new Options();
+    public static final Options defaults = new Options();
+
+    public final Storage storage;
 
     public Options() {
-        this.storageOptions = new Storage(config.getConfig("kiwi.storage"));
+        this.storage = new Storage(config.getConfig("kiwi.storage"));
     }
 
     public static class Storage {
-        private final Path logDir;
-        private final long segmentSize;
+        public final Log log;
 
         public Storage(Config config) {
-            this.logDir = Path.of(config.getString("log.dir"));
-            this.segmentSize = config.getLong("log.segment.bytes");
+            this.log = new Log(config.getConfig("log"));
         }
 
-        public Path getLogDir() {
-            return logDir;
-        }
+        public static class Log {
+            public final Path dir;
+            public final long segmentBytes;
+            public final Compaction compaction;
 
-        public long getSegmentSize() {
-            return segmentSize;
+            public Log(Config config) {
+                this.dir = Path.of(config.getString("dir"));
+                this.segmentBytes = config.getLong("segment.bytes");
+                this.compaction = new Compaction(config.getConfig("compaction"));
+            }
+
+            public static class Compaction {
+                public final Duration interval;
+                public final double minFragmentationRatio;
+
+                public Compaction(Config config) {
+                    this.interval = config.getDuration("interval");
+                    this.minFragmentationRatio = config.getDouble("min-fragmentation-ratio");
+                }
+            }
         }
     }
 
-    private final Storage storageOptions;
-
-    public Storage getStorageOptions() {
-        return storageOptions;
-    }
 }
