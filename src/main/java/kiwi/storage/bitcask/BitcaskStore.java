@@ -5,9 +5,11 @@ import kiwi.config.Options;
 import kiwi.error.KiwiException;
 import kiwi.error.KiwiReadException;
 import kiwi.storage.KeyValueStore;
+import kiwi.storage.bitcask.log.LogCleaner;
 import kiwi.storage.bitcask.log.LogSegment;
 import kiwi.storage.bitcask.log.LogSegmentNameGenerator;
 import kiwi.storage.bitcask.log.Record;
+import kiwi.storage.config.StorageConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,28 +17,89 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
     private static final Logger logger = LoggerFactory.getLogger(LogSegment.class);
 
-    private final Map<Bytes, ValueReference> keydir;
+    private final Map<Bytes, ValueReference> keyDir;
     private LogSegment activeSegment;
     private final Clock clock;
-    private final LogSegmentNameGenerator generator;
+    private final Path logDir;
     private final long logSegmentBytes;
+    private final Duration compactionInterval;
+    private final double minDirtyRatio;
+    private final LogSegmentNameGenerator generator;
+    private final LogCleaner logCleaner;
 
     private BitcaskStore(
-            Map<Bytes, ValueReference> keydir,
+            Map<Bytes, ValueReference> keyDir,
             LogSegment activeSegment,
+            Clock clock,
+            Path logDir,
             long logSegmentBytes,
-            Clock clock) {
-        this.keydir = keydir;
+            Duration compactionInterval,
+            double minDirtyRatio) {
+        this.keyDir = keyDir;
         this.activeSegment = activeSegment;
-        this.logSegmentBytes = logSegmentBytes;
         this.clock = clock;
+        this.logDir = logDir;
+        this.logSegmentBytes = logSegmentBytes;
+        this.compactionInterval = compactionInterval;
+        this.minDirtyRatio = minDirtyRatio;
+
         this.generator = LogSegmentNameGenerator.from(activeSegment);
+        this.logCleaner = new LogCleaner(compactionInterval);
+        logCleaner.schedule(this::cleanLog);
+    }
+
+    private void cleanLog() {
+        logger.info("Log cleaning started");
+
+        Map<Bytes, Long> keyTimestampMap = buildKeyTimestampMap();
+
+        findDirtySegments(keyTimestampMap).forEach(segment -> {
+        });
+    }
+
+    private Map<Bytes, Long> buildKeyTimestampMap() {
+        return keyDir.entrySet()
+                .stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().timestamp()));
+    }
+
+    private List<LogSegment> findDirtySegments(Map<Bytes, Long> keyTimestampMap) {
+        List<LogSegment> dirtySegments = new ArrayList<>();
+        try (Stream<Path> paths = Files.walk(logDir)) {
+            dirtySegments =
+                    paths.filter(Files::isRegularFile)
+                            .filter(path -> path.getFileName().toString().endsWith(".log"))
+                            .filter(path -> !path.equals(activeSegment.file()))
+                            .sorted()
+                            .map(path -> {
+                                try {
+                                    LogSegment segment = LogSegment.open(path, true);
+                                    double ratio = segment.dirtyRatio(keyTimestampMap);
+                                    if (ratio >= minDirtyRatio) {
+                                        logger.info("Found dirty segment {} with dirty ratio {}", segment.name(), String.format("%.4f", ratio));
+                                        return segment;
+                                    } else {
+                                        return null;
+                                    }
+                                } catch (KiwiReadException ex) {
+                                    logger.warn("Failed to read log segment {}", path, ex);
+                                    return null;
+                                }
+                            })
+                            .filter(Objects::nonNull)
+                            .collect(Collectors.toList());
+        } catch (IOException ex) {
+            logger.error("Failed to mark dirty segments", ex);
+        }
+        return dirtySegments;
     }
 
     public static BitcaskStore open() {
@@ -44,11 +107,11 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
     }
 
     public static BitcaskStore open(Path logDir) {
-        return new Builder(logDir).withLogSegmentBytes(Options.defaults.storage.log.segmentBytes).build();
+        return new Builder(logDir).build();
     }
 
-    public static BitcaskStore open(Options.Storage options) {
-        return new Builder(options.log.dir).withLogSegmentBytes(options.log.segmentBytes).build();
+    public static BitcaskStore open(StorageConfig storageConfig) {
+        return new Builder(storageConfig).build();
     }
 
     @Override
@@ -62,22 +125,21 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         Record record = Record.of(key, value, clock.millis(), ttl);
         int written = activeSegment.append(record);
         if (written > 0) {
-            updateKeydir(key, value, ttl);
+            updateKeydir(record);
         } else {
             throw new KiwiException("Failed to write to segment");
         }
-
         maybeRollSegment();
     }
 
-    private void updateKeydir(Bytes key, Bytes value, long ttl) {
-        if (value.equals(Record.TOMBSTONE)) {
-            keydir.remove(key);
+    private void updateKeydir(Record record) {
+        if (record.isTombstone()) {
+            keyDir.remove(record.key());
         } else {
-            long offset = activeSegment.position() - value.size();
+            long offset = activeSegment.position() - record.valueSize();
             // TODO: Avoid creating read-only segment for each put request.
-            ValueReference valueRef = new ValueReference(activeSegment.asReadOnly(), offset, value.size(), ttl);
-            keydir.put(key, valueRef);
+            ValueReference valueRef = ValueReference.of(activeSegment.asReadOnly(), offset, record);
+            keyDir.put(record.key(), valueRef);
         }
     }
 
@@ -96,12 +158,12 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
     @Override
     public Optional<Bytes> get(Bytes key) {
         Objects.requireNonNull(key, "key cannot be null");
-        ValueReference valueRef = keydir.get(key);
+        ValueReference valueRef = keyDir.get(key);
         if (valueRef == null) {
             return Optional.empty();
         }
         if (valueRef.isExpired(clock.millis())) {
-            keydir.remove(key);
+            keyDir.remove(key);
             return Optional.empty();
         }
         try {
@@ -124,31 +186,69 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
     @Override
     public boolean contains(Bytes key) {
         Objects.requireNonNull(key, "key cannot be null");
-        return keydir.containsKey(key);
+        return keyDir.containsKey(key);
     }
 
     @Override
     public int size() {
-        return keydir.size();
+        return keyDir.size();
+    }
+
+    public static Builder Builder() {
+        return new Builder();
     }
 
     public static Builder Builder(Path logDir) {
         return new Builder(logDir);
     }
 
+    public static Builder Builder(StorageConfig storageConfig) {
+        return new Builder(storageConfig);
+    }
+
     public static class Builder {
 
+        private Path logDir;
+        private long logSegmentBytes;
+        private Duration compactionInterval;
+        private double minDirtyRatio;
+        private Clock clock = Clock.systemUTC();
         private Map<Bytes, ValueReference> keydir;
         private LogSegment activeSegment;
-        private long logSegmentBytes;
-        private Clock clock = Clock.systemUTC();
+
+        Builder() {
+            this(Options.defaults.storage);
+        }
 
         Builder(Path logDir) {
-            init(logDir);
+            this(Options.defaults.storage);
+            this.logDir = logDir;
+        }
+
+        Builder(StorageConfig config) {
+            this.logDir = config.log.dir;
+            this.logSegmentBytes = config.log.segmentBytes;
+            this.compactionInterval = config.log.compaction.interval;
+            this.minDirtyRatio = config.log.compaction.minDirtyRatio;
+        }
+
+        public Builder withLogDir(Path logDir) {
+            this.logDir = logDir;
+            return this;
         }
 
         public Builder withLogSegmentBytes(long logSegmentBytes) {
             this.logSegmentBytes = logSegmentBytes;
+            return this;
+        }
+
+        public Builder withCompactionInterval(Duration compactionInterval) {
+            this.compactionInterval = compactionInterval;
+            return this;
+        }
+
+        public Builder withMinDirtyRatio(double minDirtyRatio) {
+            this.minDirtyRatio = minDirtyRatio;
             return this;
         }
 
@@ -158,7 +258,8 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         }
 
         public BitcaskStore build() {
-            return new BitcaskStore(keydir, activeSegment, logSegmentBytes, clock);
+            init(logDir);
+            return new BitcaskStore(keydir, activeSegment, clock, logDir, logSegmentBytes, compactionInterval, minDirtyRatio);
         }
 
         private void init(Path logDir) {
@@ -177,7 +278,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
                 keydir = new HashMap<>();
                 for (Path segmentPath : segmentPaths) {
                     LogSegment segment = LogSegment.open(segmentPath, true);
-                    keydir.putAll(segment.buildKeydir());
+                    keydir.putAll(segment.buildKeyDir());
                 }
                 // Remove tombstones.
                 keydir.values().removeIf(Objects::isNull);

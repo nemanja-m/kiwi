@@ -22,4 +22,10 @@ class RecordTest {
         assertFalse(record.isValidChecksum());
     }
 
+    @Test
+    void testIsTombstone() {
+        assertTrue(Record.of(Bytes.wrap("k"), Bytes.wrap(new byte[0])).isTombstone());
+        assertFalse(Record.of(Bytes.wrap("k"), Bytes.wrap("v")).isTombstone());
+    }
+
 }

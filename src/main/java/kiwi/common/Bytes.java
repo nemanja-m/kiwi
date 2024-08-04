@@ -35,6 +35,7 @@ public class Bytes {
 
     @Override
     public int hashCode() {
+        // TODO: Precompute hash code.
         return Arrays.hashCode(bytes);
     }
 

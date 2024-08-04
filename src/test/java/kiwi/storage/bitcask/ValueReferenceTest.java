@@ -9,13 +9,13 @@ class ValueReferenceTest {
 
     @Test
     void testIsExpiredNoTTL() {
-        ValueReference valueReference = new ValueReference(null, 0, 0, 0);
+        ValueReference valueReference = new ValueReference(null, 0, 0, 0, 0);
         assertFalse(valueReference.isExpired(1));
     }
 
     @Test
     void testIsExpiredWithTTL() {
-        ValueReference valueReference = new ValueReference(null, 0, 0, 1);
+        ValueReference valueReference = new ValueReference(null, 0, 0, 1, 0);
         assertTrue(valueReference.isExpired(2));
     }
 

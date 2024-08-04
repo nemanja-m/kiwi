@@ -6,22 +6,12 @@ import kiwi.storage.bitcask.Header;
 
 import java.nio.ByteBuffer;
 
-public class Record {
+public record Record(Header header, Bytes key, Bytes value) {
 
     /**
      * Tombstone marker for deleted records.
      */
     public static final Bytes TOMBSTONE = Bytes.EMPTY;
-
-    private final Header header;
-    private final Bytes key;
-    private final Bytes value;
-
-    public Record(Header header, Bytes key, Bytes value) {
-        this.header = header;
-        this.key = key;
-        this.value = value;
-    }
 
     public static Record of(Bytes key, Bytes value) {
         return Record.of(key, value, 0L, 0L);
@@ -37,8 +27,16 @@ public class Record {
         return new Record(header, key, value);
     }
 
+    public int keySize() {
+        return key.size();
+    }
+
+    public int valueSize() {
+        return value.size();
+    }
+
     public int size() {
-        return Header.BYTES + key.size() + value.size();
+        return Header.BYTES + keySize() + valueSize();
     }
 
     public ByteBuffer toByteBuffer() {
@@ -52,5 +50,9 @@ public class Record {
 
     public boolean isValidChecksum() {
         return header.checksum() == Utils.checksum(header.timestamp(), header.ttl(), key, value);
+    }
+
+    public boolean isTombstone() {
+        return value.equals(TOMBSTONE);
     }
 }

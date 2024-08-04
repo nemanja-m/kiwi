@@ -3,6 +3,7 @@ package kiwi.storage;
 import kiwi.common.Bytes;
 import kiwi.config.Options;
 import kiwi.storage.bitcask.BitcaskStore;
+import kiwi.storage.config.StorageConfig;
 
 import java.nio.file.Path;
 import java.util.Optional;
@@ -22,8 +23,8 @@ public class KiwiStore implements KeyValueStore<Bytes, Bytes> {
         return new KiwiStore(BitcaskStore.open(logDir));
     }
 
-    public static KiwiStore open(Options.Storage options) {
-        return new KiwiStore(BitcaskStore.open(options));
+    public static KiwiStore open(StorageConfig storageConfig) {
+        return new KiwiStore(BitcaskStore.open(storageConfig));
     }
 
     @Override
