@@ -14,6 +14,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.time.Clock;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -22,17 +23,27 @@ public class LogSegment {
 
     private final Path file;
     private final FileChannel channel;
+    private final Clock clock;
 
-    public LogSegment(Path file, FileChannel channel) {
+    LogSegment(Path file, FileChannel channel) {
+        this(file, channel, Clock.systemUTC());
+    }
+
+    LogSegment(Path file, FileChannel channel, Clock clock) {
         this.file = file;
         this.channel = channel;
+        this.clock = clock;
     }
 
     public static LogSegment open(Path file) throws KiwiException {
-        return open(file, false);
+        return open(file, false, Clock.systemUTC());
     }
 
     public static LogSegment open(Path file, boolean readOnly) throws KiwiException {
+        return open(file, readOnly, Clock.systemUTC());
+    }
+
+    public static LogSegment open(Path file, boolean readOnly, Clock clock) throws KiwiException {
         try {
             FileChannel channel;
             if (readOnly) {
@@ -40,7 +51,7 @@ public class LogSegment {
             } else {
                 channel = FileChannel.open(file, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
             }
-            return new LogSegment(file, channel);
+            return new LogSegment(file, channel, clock);
         } catch (Exception ex) {
             throw new KiwiException("Failed to open log segment " + file.toString(), ex);
         }
@@ -88,6 +99,10 @@ public class LogSegment {
         return file.getParent();
     }
 
+    public Path file() {
+        return file;
+    }
+
     public void close() {
         try {
             channel.force(true);
@@ -97,25 +112,86 @@ public class LogSegment {
         }
     }
 
+    public boolean equalsTo(LogSegment other) {
+        if (this == other) {
+            return true;
+        }
+        if (other == null || getClass() != other.getClass()) {
+            return false;
+        }
+        return file.equals(other.file);
+    }
+
     public LogSegment asReadOnly() {
         return open(file, true);
     }
 
-    public Map<Bytes, ValueReference> buildKeydir() throws KiwiReadException {
+    public double dirtyRatio(Map<Bytes, Long> keyTimestampMap) {
+        long total = 0;
+        long dirtyCount = 0;
+
+        try {
+            channel.position(0);
+            ByteBuffer buffer = ByteBuffer.allocate(Header.BYTES);
+            while (channel.read(buffer) != -1) {
+                buffer.flip();
+
+                // Skip the checksum.
+                buffer.position(buffer.position() + Long.BYTES);
+
+                long timestamp = buffer.getLong();
+                long ttl = buffer.getLong();
+                int keySize = buffer.getInt();
+                int valueSize = buffer.getInt();
+
+                buffer.clear();
+
+                if (ttl > 0 && clock.millis() > ttl) {
+                    // Expired records are considered dirty.
+                    dirtyCount += 1;
+
+                    // Skip the key and value.
+                    channel.position(channel.position() + keySize + valueSize);
+                } else {
+                    ByteBuffer keyBuffer = ByteBuffer.allocate(keySize);
+                    channel.read(keyBuffer);
+
+                    Bytes key = Bytes.wrap(keyBuffer.array());
+
+                    // Stale records are considered dirty.
+                    if (!keyTimestampMap.containsKey(key) || keyTimestampMap.get(key) > timestamp) {
+                        dirtyCount += 1;
+                    }
+
+                    // Skip the value.
+                    channel.position(channel.position() + valueSize);
+                }
+
+                total += 1;
+            }
+        } catch (IOException | IllegalStateException ex) {
+            throw new KiwiReadException("Failed to calculate dirty ratio for log segment " + file, ex);
+        }
+
+        return total > 0 ? (double) dirtyCount / total : 0;
+    }
+
+    public Map<Bytes, ValueReference> buildKeyDir() throws KiwiReadException {
         logger.info("Building keydir from log segment {}", file.toString());
 
         try {
             channel.position(0);
 
-            Map<Bytes, ValueReference> keydir = new HashMap<>();
+            Map<Bytes, ValueReference> keyDir = new HashMap<>();
             ByteBuffer buffer = ByteBuffer.allocate(Header.BYTES);
             while (channel.read(buffer) != -1) {
                 buffer.flip();
 
-                // Skip the checksum and timestamp.
+                // Skip the checksum.
                 // Checksum validation is done during background compaction.
-                buffer.position(buffer.position() + 2 * Long.BYTES);
+                buffer.position(buffer.position() + Long.BYTES);
 
+                long timestamp = buffer.getLong();
                 long ttl = buffer.getLong();
                 int keySize = buffer.getInt();
                 int valueSize = buffer.getInt();
@@ -135,14 +211,14 @@ public class LogSegment {
 
                 Bytes key = Bytes.wrap(keyBuffer.array());
                 if (valueSize > 0 && !expired) {
-                    ValueReference valueRef = new ValueReference(this, valuePosition, valueSize, ttl);
-                    keydir.put(key, valueRef);
+                    ValueReference valueRef = new ValueReference(this, valuePosition, valueSize, ttl, timestamp);
+                    keyDir.put(key, valueRef);
                 } else {
                     // Skip expired records and tombstone records.
-                    keydir.put(key, null);
+                    keyDir.put(key, null);
                 }
             }
-            return keydir;
+            return keyDir;
         } catch (IOException | IllegalStateException ex) {
             throw new KiwiReadException("Failed to build hash table from log segment " + file, ex);
         }
