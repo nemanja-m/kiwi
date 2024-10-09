@@ -4,6 +4,7 @@ import kiwi.common.Bytes;
 import kiwi.error.KiwiException;
 import kiwi.error.KiwiReadException;
 import kiwi.error.KiwiWriteException;
+import kiwi.error.SoftDeleteException;
 import kiwi.storage.bitcask.Header;
 import kiwi.storage.bitcask.KeyHeader;
 import kiwi.storage.bitcask.ValueReference;
@@ -13,8 +14,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
+import java.nio.file.*;
 import java.time.Clock;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -113,6 +113,30 @@ public class LogSegment {
             channel.close();
         } catch (IOException ex) {
             logger.error("Failed to close log segment {}", file.toString(), ex);
+        }
+    }
+
+    public void softDelete() {
+        close();
+
+        String deletedFileName = file.getFileName().toString() + ".deleted";
+        Path deletedFile = file.resolveSibling(deletedFileName);
+
+        try {
+            Files.move(file, deletedFile, StandardCopyOption.ATOMIC_MOVE);
+            logger.info("Marked log segment {} for deletion", file);
+        } catch (AtomicMoveNotSupportedException ex) {
+            logger.warn("Atomic move not supported, falling back to non-atomic move for {}", file);
+            try {
+                Files.move(file, deletedFile);
+                logger.info("Marked log segment {} for deletion (non-atomic)", file);
+            } catch (IOException e) {
+                logger.error("Failed to soft delete log segment {}", file, e);
+                throw new SoftDeleteException("Failed to soft delete log segment", e);
+            }
+        } catch (IOException ex) {
+            logger.error("Failed to soft delete log segment {}", file, ex);
+            throw new SoftDeleteException("Failed to soft delete log segment", ex);
         }
     }
 

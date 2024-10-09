@@ -16,13 +16,13 @@ public class LogCleaner {
 
     public LogCleaner(Duration interval) {
         this.interval = interval;
-        this.scheduler = Executors.newScheduledThreadPool(1);
+        this.scheduler = Executors.newScheduledThreadPool(2);
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             logger.info("Shutting down log cleaner");
             scheduler.shutdown();
             try {
-                if (!scheduler.awaitTermination(5, TimeUnit.MINUTES)) {
+                if (!scheduler.awaitTermination(3, TimeUnit.MINUTES)) {
                     logger.warn("Log cleaner did not shutdown in time. Forcing shutdown.");
                     scheduler.shutdownNow();
                 }
@@ -34,6 +34,6 @@ public class LogCleaner {
     }
 
     public void schedule(Runnable task) {
-        scheduler.scheduleAtFixedRate(task, interval.toMinutes(), interval.toMinutes(), TimeUnit.MINUTES);
+        scheduler.scheduleAtFixedRate(task, interval.toSeconds(), interval.toSeconds(), TimeUnit.SECONDS);
     }
 }

@@ -180,6 +180,22 @@ class LogSegmentTest {
         assertEquals(Record.of(Bytes.wrap("k1"), Bytes.wrap("v11"), 1L), records.getFirst());
     }
 
+    @Test
+    void testSoftDelete() throws IOException {
+        writeRecords(
+                "000.log",
+                List.of(
+                        Record.of(Bytes.wrap("k1"), Bytes.wrap("v1")),
+                        Record.of(Bytes.wrap("k2"), Bytes.wrap("v2"))
+                ));
+
+        LogSegment segment = LogSegment.open(root.resolve("000.log"), true);
+        segment.softDelete();
+
+        assertTrue(Files.exists(root.resolve("000.log.deleted")));
+        assertFalse(Files.exists(root.resolve("000.log")));
+    }
+
     private void writeRecords(String filename, List<Record> records) throws IOException {
         try (FileChannel channel = FileChannel.open(root.resolve(filename), StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
             records.forEach((record) -> {

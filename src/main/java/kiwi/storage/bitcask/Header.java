@@ -15,4 +15,13 @@ public record Header(long checksum, long timestamp, long ttl, int keySize, int v
         buffer.rewind();
         return buffer;
     }
+
+    public static Header fromByteBuffer(ByteBuffer buffer) {
+        long checksum = buffer.getLong();
+        long timestamp = buffer.getLong();
+        long ttl = buffer.getLong();
+        int keySize = buffer.getInt();
+        int valueSize = buffer.getInt();
+        return new Header(checksum, timestamp, ttl, keySize, valueSize);
+    }
 }

@@ -35,7 +35,7 @@ public class Bytes {
 
     @Override
     public int hashCode() {
-        // TODO: Precompute hash code.
+        // TODO: Precompute hash code. Use MD5 or SHA-1.
         return Arrays.hashCode(bytes);
     }
 

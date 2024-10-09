@@ -19,10 +19,12 @@ public class LogConfig {
     public static class Compaction {
         public final Duration interval;
         public final double minDirtyRatio;
+        public final long segmentMinBytes;
 
         public Compaction(Config config) {
             this.interval = config.getDuration("interval");
-            this.minDirtyRatio = config.getDouble("min-dirty-ratio");
+            this.minDirtyRatio = config.getDouble("min.dirty.ratio");
+            this.segmentMinBytes = config.getLong("segment.min.bytes");
         }
     }
 }
