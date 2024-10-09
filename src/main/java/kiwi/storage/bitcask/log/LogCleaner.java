@@ -19,7 +19,7 @@ public class LogCleaner {
         this.scheduler = Executors.newScheduledThreadPool(1);
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            logger.info("Shutting down log cleaner ...");
+            logger.info("Shutting down log cleaner");
             scheduler.shutdown();
             try {
                 if (!scheduler.awaitTermination(5, TimeUnit.MINUTES)) {

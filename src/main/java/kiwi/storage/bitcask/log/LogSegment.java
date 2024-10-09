@@ -5,6 +5,7 @@ import kiwi.error.KiwiException;
 import kiwi.error.KiwiReadException;
 import kiwi.error.KiwiWriteException;
 import kiwi.storage.bitcask.Header;
+import kiwi.storage.bitcask.KeyHeader;
 import kiwi.storage.bitcask.ValueReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,7 +17,10 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Clock;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.function.Predicate;
 
 public class LogSegment {
     private static final Logger logger = LoggerFactory.getLogger(LogSegment.class);
@@ -159,7 +163,7 @@ public class LogSegment {
                     Bytes key = Bytes.wrap(keyBuffer.array());
 
                     // Stale records are considered dirty.
-                    if (!keyTimestampMap.containsKey(key) || keyTimestampMap.get(key) > timestamp) {
+                    if (keyTimestampMap.getOrDefault(key, Long.MAX_VALUE) > timestamp) {
                         dirtyCount += 1;
                     }
 
@@ -173,7 +177,24 @@ public class LogSegment {
             throw new KiwiReadException("Failed to calculate dirty ratio for log segment " + file, ex);
         }
 
-        return total > 0 ? (double) dirtyCount / total : 0;
+        if (total == 0) {
+            return 0;
+        }
+
+        return (double) dirtyCount / total;
+    }
+
+    public Iterable<Record> getActiveRecords(Map<Bytes, Long> keyTimestampMap) {
+        return () -> new RecordIterator(channel, keyHeader -> isActiveRecord(keyHeader, keyTimestampMap));
+    }
+
+    private boolean isActiveRecord(KeyHeader keyHeader, Map<Bytes, Long> keyTimestampMap) {
+        long ttl = keyHeader.header().ttl();
+        if (ttl > 0 && clock.millis() > ttl) {
+            return false;
+        }
+        long timestamp = keyHeader.header().timestamp();
+        return keyTimestampMap.getOrDefault(keyHeader.key(), Long.MAX_VALUE) == timestamp;
     }
 
     public Map<Bytes, ValueReference> buildKeyDir() throws KiwiReadException {
@@ -224,4 +245,72 @@ public class LogSegment {
         }
     }
 
+    private static class RecordIterator implements Iterator<Record> {
+        private final FileChannel channel;
+        private final Predicate<KeyHeader> predicate;
+        private long position;
+        private Record nextRecord;
+
+        public RecordIterator(FileChannel channel, Predicate<KeyHeader> predicate) {
+            this.channel = channel;
+            this.predicate = predicate;
+            this.position = 0;
+            this.nextRecord = null;
+        }
+
+        @Override
+        public boolean hasNext() {
+            if (nextRecord != null) {
+                return true;
+            }
+
+            try {
+                while (position < channel.size()) {
+                    channel.position(position);
+
+                    ByteBuffer headerBuffer = ByteBuffer.allocate(Header.BYTES);
+                    if (channel.read(headerBuffer) < Header.BYTES) {
+                        return false; // Not enough data for a header
+                    }
+                    headerBuffer.flip();
+                    Header header = Header.fromByteBuffer(headerBuffer);
+
+                    // Next record position.
+                    position = channel.position() + header.keySize() + header.valueSize();
+
+                    ByteBuffer keyBuffer = ByteBuffer.allocate(header.keySize());
+                    if (channel.read(keyBuffer) < header.keySize()) {
+                        return false; // Not enough data for a key
+                    }
+                    Bytes key = Bytes.wrap(keyBuffer.array());
+
+                    KeyHeader keyHeader = new KeyHeader(key, header);
+                    if (predicate.test(keyHeader)) {
+                        ByteBuffer valueBuffer = ByteBuffer.allocate(header.valueSize());
+                        if (channel.read(valueBuffer) < header.valueSize()) {
+                            return false; // Not enough data for a value
+                        }
+                        valueBuffer.flip();
+                        Bytes value = Bytes.wrap(valueBuffer.array());
+                        nextRecord = new Record(header, key, value);
+                        return true;
+                    }
+                }
+            } catch (IOException ex) {
+                throw new KiwiReadException("Failed to read next record from log segment", ex);
+            }
+
+            return false;
+        }
+
+        @Override
+        public Record next() {
+            if (!hasNext()) {
+                throw new NoSuchElementException();
+            }
+            Record record = nextRecord;
+            nextRecord = null;
+            return record;
+        }
+    }
 }

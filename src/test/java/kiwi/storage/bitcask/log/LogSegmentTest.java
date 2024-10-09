@@ -12,6 +12,7 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -150,6 +151,33 @@ class LogSegmentTest {
         assertEquals("v11", keydir.get(Bytes.wrap("k1")).get().toString());
         assertNull(keydir.get(Bytes.wrap("k2")));
         assertNull(keydir.get(Bytes.wrap("k3")));
+    }
+
+    @Test
+    void testGetActiveRecordsIterator() throws IOException {
+        writeRecords(
+                "001.log",
+                List.of(
+                        Record.of(Bytes.wrap("k1"), Bytes.wrap("v1"), 0L),
+                        Record.of(Bytes.wrap("k2"), Bytes.wrap("v2"), 0L),
+                        Record.of(Bytes.wrap("k1"), Bytes.wrap("v11"), 1L),
+                        Record.of(Bytes.wrap("k2"), Bytes.EMPTY, 1L),
+                        Record.of(Bytes.wrap("k3"), Bytes.wrap("v3"), 1L, 1L) // Expired.
+                ));
+
+        LogSegment segment = LogSegment.open(root.resolve("001.log"), true);
+        Map<Bytes, Long> keyTimestampMap = Map.of(
+                Bytes.wrap("k1"), 1L,
+                Bytes.wrap("k3"), 1L
+        );
+
+        List<Record> records = new ArrayList<>();
+        for (Record record : segment.getActiveRecords(keyTimestampMap)) {
+            records.add(record);
+        }
+
+        assertEquals(1, records.size());
+        assertEquals(Record.of(Bytes.wrap("k1"), Bytes.wrap("v11"), 1L), records.getFirst());
     }
 
     private void writeRecords(String filename, List<Record> records) throws IOException {
