@@ -18,24 +18,23 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
     private static final Logger logger = LoggerFactory.getLogger(BitcaskStore.class);
 
-    private final Map<Bytes, ValueReference> keyDir;
+    private final KeyDir keyDir;
     private LogSegment activeSegment;
     private final Clock clock;
-    private final Path logDir;
     private final long logSegmentBytes;
-    private final long compactionSegmentMinBytes;
-    private final double minDirtyRatio;
     private final LogSegmentNameGenerator generator;
 
     private BitcaskStore(
-            Map<Bytes, ValueReference> keyDir,
+            KeyDir keyDir,
             LogSegment activeSegment,
             Clock clock,
             Path logDir,
@@ -46,120 +45,19 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         this.keyDir = keyDir;
         this.activeSegment = activeSegment;
         this.clock = clock;
-        this.logDir = logDir;
         this.logSegmentBytes = logSegmentBytes;
-        this.compactionSegmentMinBytes = compactionSegmentMinBytes;
-        this.minDirtyRatio = minDirtyRatio;
         this.generator = LogSegmentNameGenerator.from(activeSegment);
 
-        LogCleaner logCleaner = new LogCleaner(compactionInterval);
-        logCleaner.schedule(this::compactLog);
-        logCleaner.schedule(this::cleanLog);
-    }
+        LogCleaner logCleaner = new LogCleaner(
+                logDir,
+                keyDir,
+                () -> activeSegment,
+                generator,
+                minDirtyRatio,
+                compactionSegmentMinBytes,
+                logSegmentBytes);
 
-    void compactLog() {
-        logger.info("Log compaction started");
-
-        Map<Bytes, Long> keyTimestampMap = buildKeyTimestampMap();
-
-        List<LogSegment> dirtySegments = findDirtySegments(keyTimestampMap);
-        if (dirtySegments.isEmpty()) {
-            logger.info("No dirty segments found");
-        } else {
-            LogSegment newSegment = null;
-
-            for (LogSegment dirtySegment : dirtySegments) {
-                for (Record record : dirtySegment.getActiveRecords(keyTimestampMap)) {
-                    if (newSegment == null || newSegment.size() >= logSegmentBytes) {
-                        if (newSegment != null) {
-                            newSegment.close();
-                        }
-                        newSegment = LogSegment.open(generator.next());
-                        logger.info("Opened new compacted log segment {}", newSegment.name());
-                    }
-
-                    newSegment.append(record);
-
-                    // Prevent keydir from being updated with stale values.
-                    ValueReference currentValue = keyDir.get(record.key());
-                    if (currentValue != null && currentValue.timestamp() <= record.header().timestamp()) {
-                        updateKeydir(record, newSegment);
-                    }
-                }
-            }
-
-            if (newSegment != null) {
-                newSegment.close();
-            }
-
-            for (LogSegment dirtySegment : dirtySegments) {
-                dirtySegment.softDelete();
-            }
-        }
-
-        logger.info("Log compaction ended");
-    }
-
-    void cleanLog() {
-        logger.info("Log cleaning started");
-
-        try (Stream<Path> paths = Files.walk(logDir)) {
-            paths.filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().endsWith(".deleted"))
-                    .forEach(path -> {
-                        try {
-                            Files.deleteIfExists(path);
-                            logger.info("Deleted log segment {}", path);
-                        } catch (IOException ex) {
-                            logger.warn("Failed to delete dirty segments", ex);
-                        }
-                    });
-        } catch (IOException ex) {
-            logger.warn("Failed to clean dirty segments", ex);
-        }
-
-        logger.info("Log cleaning ended");
-    }
-
-    private Map<Bytes, Long> buildKeyTimestampMap() {
-        return keyDir.entrySet()
-                .stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().timestamp()));
-    }
-
-    private List<LogSegment> findDirtySegments(Map<Bytes, Long> keyTimestampMap) {
-        List<LogSegment> dirtySegments = new ArrayList<>();
-        try (Stream<Path> paths = Files.walk(logDir)) {
-            dirtySegments = paths
-                    .filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().endsWith(".log"))
-                    .filter(path -> !path.equals(activeSegment.file()))
-                    .sorted()
-                    .map(path -> {
-                        try {
-                            LogSegment segment = LogSegment.open(path, true);
-                            double ratio = segment.dirtyRatio(keyTimestampMap);
-                            if (ratio >= minDirtyRatio) {
-                                logger.info("Found segment {} with dirty ratio {}", segment.name(), String.format("%.4f", ratio));
-                                return segment;
-                            } else if (segment.size() < compactionSegmentMinBytes) {
-                                // Delete empty or almost empty segments.
-                                logger.info("Found segment {} with {} bytes", segment.name(), segment.size());
-                                return segment;
-                            } else {
-                                return null;
-                            }
-                        } catch (KiwiReadException ex) {
-                            logger.warn("Failed to read log segment {}", path, ex);
-                            return null;
-                        }
-                    })
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
-        } catch (IOException ex) {
-            logger.error("Failed to mark dirty segments", ex);
-        }
-        return dirtySegments;
+        logCleaner.start(compactionInterval);
     }
 
     public static BitcaskStore open() {
@@ -185,22 +83,11 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         Record record = Record.of(key, value, clock.millis(), ttl);
         int written = activeSegment.append(record);
         if (written > 0) {
-            updateKeydir(record, activeSegment);
+            keyDir.update(record, activeSegment);
         } else {
             throw new KiwiException("Failed to write to segment");
         }
         maybeRollSegment();
-    }
-
-    private void updateKeydir(Record record, LogSegment segment) {
-        if (record.isTombstone()) {
-            keyDir.remove(record.key());
-        } else {
-            long offset = segment.position() - record.valueSize();
-            // TODO: Avoid creating read-only segment for each put request.
-            ValueReference valueRef = ValueReference.of(segment.asReadOnly(), offset, record);
-            keyDir.put(record.key(), valueRef);
-        }
     }
 
     private void maybeRollSegment() {
@@ -274,7 +161,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         private Duration compactionInterval;
         private double minDirtyRatio;
         private Clock clock = Clock.systemUTC();
-        private Map<Bytes, ValueReference> keydir;
+        private KeyDir keyDir;
         private LogSegment activeSegment;
 
         Builder() {
@@ -327,7 +214,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         public BitcaskStore build() {
             init(logDir);
             return new BitcaskStore(
-                    keydir,
+                    keyDir,
                     activeSegment,
                     clock,
                     logDir,
@@ -350,13 +237,21 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
                         .sorted()
                         .toList();
 
-                keydir = new HashMap<>();
+                keyDir = new KeyDir();
                 for (Path segmentPath : segmentPaths) {
                     LogSegment segment = LogSegment.open(segmentPath, true);
-                    keydir.putAll(segment.buildKeyDir());
+                    for (Map.Entry<Bytes, ValueReference> entry : segment.buildKeyDir().entrySet()) {
+                        Bytes key = entry.getKey();
+                        ValueReference value = entry.getValue();
+                        if (value == null) {
+                            keyDir.remove(key);
+                        } else {
+                            keyDir.put(key, value);
+                        }
+                    }
                 }
                 // Remove tombstones.
-                keydir.values().removeIf(Objects::isNull);
+                keyDir.values().removeIf(Objects::isNull);
 
                 // TODO: Always create new active segment file to avoid name collision during compaction process.
                 Path activeSegmentPath;

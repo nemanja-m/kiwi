@@ -116,7 +116,7 @@ public class LogSegment {
         }
     }
 
-    public void softDelete() {
+    public void markAsDeleted() {
         close();
 
         String deletedFileName = file.getFileName().toString() + ".deleted";

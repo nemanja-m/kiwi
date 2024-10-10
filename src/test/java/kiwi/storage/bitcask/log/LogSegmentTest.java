@@ -181,7 +181,7 @@ class LogSegmentTest {
     }
 
     @Test
-    void testSoftDelete() throws IOException {
+    void testMarkAsDeleted() throws IOException {
         writeRecords(
                 "000.log",
                 List.of(
@@ -190,7 +190,7 @@ class LogSegmentTest {
                 ));
 
         LogSegment segment = LogSegment.open(root.resolve("000.log"), true);
-        segment.softDelete();
+        segment.markAsDeleted();
 
         assertTrue(Files.exists(root.resolve("000.log.deleted")));
         assertFalse(Files.exists(root.resolve("000.log")));
