@@ -13,7 +13,6 @@ public class KeyDir extends ConcurrentHashMap<Bytes, ValueReference> {
             super.remove(record.key());
         } else {
             long offset = segment.position() - record.valueSize();
-            // TODO: Avoid creating read-only segment for each put request.
             ValueReference valueRef = ValueReference.of(segment, offset, record);
             super.put(record.key(), valueRef);
         }

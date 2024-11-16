@@ -88,38 +88,41 @@ public class LogCleaner {
         logger.info("Log compaction started");
 
         Map<Bytes, Long> keyTimestampMap = buildKeyTimestampMap();
-
         List<LogSegment> dirtySegments = findDirtySegments(keyTimestampMap);
+
         if (dirtySegments.isEmpty()) {
             logger.info("No dirty segments found");
-        } else {
-            LogSegment newSegment = null;
+            return;
+        }
 
-            for (LogSegment dirtySegment : dirtySegments) {
-                for (Record record : dirtySegment.getActiveRecords(keyTimestampMap)) {
-                    if (newSegment == null || newSegment.size() >= logSegmentBytes) {
-                        if (newSegment != null) {
-                            newSegment.close();
-                        }
-                        newSegment = LogSegment.open(segmentNameGenerator.next());
-                        logger.info("Opened new compacted log segment {}", newSegment.name());
+        LogSegment newSegment = null;
+        for (LogSegment dirtySegment : dirtySegments) {
+            for (Record record : dirtySegment.getActiveRecords(keyTimestampMap)) {
+                if (newSegment == null || newSegment.size() >= logSegmentBytes) {
+                    if (newSegment != null) {
+                        newSegment.close();
                     }
-
-                    newSegment.append(record);
-
-                    // Prevent keydir from being updated with stale values.
-                    ValueReference currentValue = keyDir.get(record.key());
-                    if (currentValue != null && currentValue.timestamp() <= record.header().timestamp()) {
-                        keyDir.update(record, newSegment);
-                    }
+                    newSegment = LogSegment.open(segmentNameGenerator.next());
+                    logger.info("Opened new compacted log segment {}", newSegment.name());
                 }
 
-                dirtySegment.markAsDeleted();
-            }
+                newSegment.append(record);
 
-            if (newSegment != null) {
-                newSegment.close();
+                // Prevent keydir from being updated with stale values.
+                ValueReference currentValue = keyDir.get(record.key());
+                if (currentValue != null && currentValue.timestamp() <= record.header().timestamp()) {
+                    keyDir.update(record, newSegment);
+                }
             }
+        }
+
+        if (newSegment != null) {
+            newSegment.close();
+        }
+
+        // Mark dirty segments for deletion after new segments are closed.
+        for (LogSegment dirtySegment : dirtySegments) {
+            dirtySegment.markAsDeleted();
         }
 
         logger.info("Log compaction ended");
@@ -150,6 +153,7 @@ public class LogCleaner {
 
     private List<LogSegment> findDirtySegments(Map<Bytes, Long> keyTimestampMap) {
         List<LogSegment> dirtySegments = new ArrayList<>();
+
         try (Stream<Path> paths = Files.walk(logDir)) {
             dirtySegments = paths
                     .filter(Files::isRegularFile)
@@ -164,7 +168,7 @@ public class LogCleaner {
                                 logger.info("Found segment {} with dirty ratio {}", segment.name(), String.format("%.4f", ratio));
                                 return segment;
                             } else if (segment.size() < compactionSegmentMinBytes) {
-                                // Delete empty or almost empty segments.
+                                // Compact empty or almost empty segments.
                                 logger.info("Found segment {} with {} bytes", segment.name(), segment.size());
                                 return segment;
                             } else {
@@ -183,7 +187,7 @@ public class LogCleaner {
 
         // Prevents infinite compaction loop when only one dirty segment is found.
         if (dirtySegments.size() == 1 && dirtySegments.getFirst().size() < compactionSegmentMinBytes) {
-            logger.info("Only one dirty segment found with {} bytes. Skipping compaction.", dirtySegments.getFirst().size());
+            logger.info("Single dirty segment found with {} bytes. Skipping compaction.", dirtySegments.getFirst().size());
             dirtySegments.clear();
         }
 

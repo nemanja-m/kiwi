@@ -33,4 +33,5 @@ gradle-app.setting
 
 # Log files
 *.log
+*.deleted
 *.hints
