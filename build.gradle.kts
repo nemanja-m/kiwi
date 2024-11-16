@@ -22,6 +22,7 @@ dependencies {
     implementation(libs.slf4j)
     implementation(libs.logback)
     implementation(libs.typesafe.config)
+    implementation(libs.zero.allocation.hashing)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
