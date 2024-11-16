@@ -253,7 +253,6 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
                 // Remove tombstones.
                 keyDir.values().removeIf(Objects::isNull);
 
-                // TODO: Always create new active segment file to avoid name collision during compaction process.
                 Path activeSegmentPath;
                 if (segmentPaths.isEmpty()) {
                     activeSegmentPath = new LogSegmentNameGenerator(logDir).next();

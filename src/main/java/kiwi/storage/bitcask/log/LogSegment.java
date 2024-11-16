@@ -53,7 +53,10 @@ public class LogSegment {
             if (readOnly) {
                 channel = FileChannel.open(file, StandardOpenOption.READ);
             } else {
-                channel = FileChannel.open(file, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+                // File is opened for reading and writing.
+                // To prevent overwrites, position is set to the end of the file.
+                channel = FileChannel.open(file, StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE);
+                channel.position(channel.size());
             }
             return new LogSegment(file, channel, clock);
         } catch (Exception ex) {
@@ -148,10 +151,6 @@ public class LogSegment {
             return false;
         }
         return file.equals(other.file);
-    }
-
-    public LogSegment asReadOnly() {
-        return open(file, true);
     }
 
     public double dirtyRatio(Map<Bytes, Long> keyTimestampMap) {

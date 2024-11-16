@@ -1,7 +1,6 @@
 package kiwi.storage.bitcask.log;
 
 import kiwi.common.Bytes;
-import kiwi.error.KiwiReadException;
 import kiwi.error.KiwiWriteException;
 import kiwi.storage.bitcask.ValueReference;
 import org.junit.jupiter.api.Test;
@@ -50,20 +49,21 @@ class LogSegmentTest {
     }
 
     @Test
-    void testOpenAsAppendOnlyThrowsOnRead() {
-        LogSegment segment = LogSegment.open(root.resolve("001.log"));
-
-        Record record = Record.of(Bytes.wrap("k"), Bytes.wrap("v"));
-        int written = segment.append(record);
-
-        assertEquals(record.size(), written);
-        assertThrows(KiwiReadException.class, () -> segment.read(0, 1));
+    void testOpenAsReadWriteCreatesSegmentFile() {
+        LogSegment.open(root.resolve("001.log"));
+        assertTrue(Files.exists(root.resolve("001.log")));
     }
 
     @Test
-    void testOpenAsAppendOnlyCreatesSegmentFile() {
-        LogSegment.open(root.resolve("001.log"));
-        assertTrue(Files.exists(root.resolve("001.log")));
+    void testOpenAsReadWriteDoesNotOverwriteExistingFile() {
+        LogSegment segment = LogSegment.open(root.resolve("001.log"));
+        int written = segment.append(Record.of(Bytes.wrap("k"), Bytes.wrap("v")));
+        segment.close();
+
+        LogSegment newSegment = LogSegment.open(root.resolve("001.log"));
+        written += newSegment.append(Record.of(Bytes.wrap("k"), Bytes.wrap("updated")));
+
+        assertEquals(written, newSegment.position());
     }
 
     @Test
