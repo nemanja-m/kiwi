@@ -30,7 +30,7 @@ public class LogSegmentNameGenerator {
         return new LogSegmentNameGenerator(dir, counter);
     }
 
-    public Path next() {
+    public synchronized Path next() {
         // Max number of segments is 64-bit unsigned long.
         return dir.resolve(String.format("%020d.log", counter++));
     }

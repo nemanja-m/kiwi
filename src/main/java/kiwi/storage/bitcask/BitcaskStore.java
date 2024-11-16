@@ -31,7 +31,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
     private LogSegment activeSegment;
     private final Clock clock;
     private final long logSegmentBytes;
-    private final LogSegmentNameGenerator generator;
+    private final LogSegmentNameGenerator segmentNameGenerator;
 
     private BitcaskStore(
             KeyDir keyDir,
@@ -46,13 +46,13 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         this.activeSegment = activeSegment;
         this.clock = clock;
         this.logSegmentBytes = logSegmentBytes;
-        this.generator = LogSegmentNameGenerator.from(activeSegment);
+        this.segmentNameGenerator = LogSegmentNameGenerator.from(activeSegment);
 
         LogCleaner logCleaner = new LogCleaner(
                 logDir,
                 keyDir,
                 () -> activeSegment,
-                generator,
+                segmentNameGenerator,
                 minDirtyRatio,
                 compactionSegmentMinBytes,
                 logSegmentBytes);
@@ -93,7 +93,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
     private void maybeRollSegment() {
         if (shouldRoll()) {
             activeSegment.close();
-            activeSegment = LogSegment.open(generator.next());
+            activeSegment = LogSegment.open(segmentNameGenerator.next());
             logger.info("Opened new log segment {}", activeSegment.name());
         }
     }
