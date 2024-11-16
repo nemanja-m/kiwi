@@ -93,7 +93,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
 
     private void maybeRollSegment() {
         if (shouldRoll()) {
-            activeSegment.close();
+            activeSegment.markAsReadOnly();
             activeSegment = LogSegment.open(segmentNameGenerator.next());
             logger.info("Opened new log segment {}", activeSegment.name());
         }
@@ -244,7 +244,14 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
 
                 keyDir = new KeyDir();
                 for (Path segmentPath : segmentPaths) {
-                    LogSegment segment = LogSegment.open(segmentPath, true);
+                    LogSegment segment;
+                    if (segmentPath.equals(segmentPaths.getLast())) {
+                        activeSegment = LogSegment.open(segmentPath);
+                        segment = activeSegment;
+                    } else {
+                        segment = LogSegment.open(segmentPath, true);
+                    }
+
                     for (Map.Entry<Bytes, ValueReference> entry : segment.buildKeyDir().entrySet()) {
                         Bytes key = entry.getKey();
                         ValueReference value = entry.getValue();
@@ -258,13 +265,11 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
                 // Remove tombstones.
                 keyDir.values().removeIf(Objects::isNull);
 
-                Path activeSegmentPath;
-                if (segmentPaths.isEmpty()) {
-                    activeSegmentPath = new LogSegmentNameGenerator(logDir).next();
-                } else {
-                    activeSegmentPath = segmentPaths.getLast();
+                // Create new active segment when there are no segment files.
+                if (activeSegment == null) {
+                    Path activeSegmentPath = new LogSegmentNameGenerator(logDir).next();
+                    activeSegment = LogSegment.open(activeSegmentPath);
                 }
-                this.activeSegment = LogSegment.open(activeSegmentPath);
             } catch (IOException ex) {
                 throw new KiwiReadException("Failed to read log directory " + logDir, ex);
             }

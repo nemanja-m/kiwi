@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -147,6 +148,28 @@ class BitcaskStoreTest {
         assertEquals(2, files.size());
         assertEquals(expectedFirst, files.getFirst().getFileName());
         assertEquals(expectedSecond, files.getLast().getFileName());
+
+        // Inactive segment should serve reads.
+        assertEquals("1", store.get(Bytes.wrap("a")).orElseThrow().toString());
+        assertEquals("2", store.get(Bytes.wrap("b")).orElseThrow().toString());
+        assertEquals("3", store.get(Bytes.wrap("c")).orElseThrow().toString());
+    }
+
+    @Test
+    void testFileClose() throws IOException {
+        FileChannel channel = FileChannel.open(root.resolve("test.log"), StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE);
+        ByteBuffer src = ByteBuffer.wrap("Hello, World!".getBytes());
+        channel.write(src);
+
+        channel.close();
+
+        try {
+            ByteBuffer dst = ByteBuffer.allocate(1024);
+            channel.read(dst);
+            fail("Channel should be closed");
+        } catch (IOException ex) {
+            // Expected.
+        }
     }
 
     void prepareSegment(String name, List<KeyValue<String, String>> entries) throws IOException {

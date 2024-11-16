@@ -2,6 +2,7 @@ package kiwi.storage.bitcask.log;
 
 import kiwi.common.Bytes;
 import kiwi.error.KiwiWriteException;
+import kiwi.storage.bitcask.Header;
 import kiwi.storage.bitcask.ValueReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -186,6 +187,26 @@ class LogSegmentTest {
 
         assertEquals(1, records.size());
         assertEquals(Record.of(Bytes.wrap("k1"), Bytes.wrap("v11"), 1L), records.getFirst());
+    }
+
+    @Test
+    void markAsReadOnly() throws IOException {
+        writeRecords(
+                "000.log",
+                List.of(
+                        Record.of(Bytes.wrap("k1"), Bytes.wrap("v1")),
+                        Record.of(Bytes.wrap("k2"), Bytes.wrap("v2"))
+                ));
+
+        LogSegment segment = LogSegment.open(root.resolve("000.log"));
+        segment.markAsReadOnly();
+
+        assertDoesNotThrow(() -> {
+            segment.read(0, Header.BYTES);
+        });
+        assertThrows(KiwiWriteException.class, () -> {
+            segment.append(Record.of(Bytes.wrap("k3"), Bytes.wrap("v3")));
+        });
     }
 
     @Test

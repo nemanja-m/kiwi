@@ -26,7 +26,7 @@ public class LogSegment {
     private static final Logger logger = LoggerFactory.getLogger(LogSegment.class);
 
     private final Path file;
-    private final FileChannel channel;
+    private FileChannel channel;
     private final Clock clock;
 
     LogSegment(Path file, FileChannel channel) {
@@ -116,6 +116,15 @@ public class LogSegment {
             channel.close();
         } catch (IOException ex) {
             logger.error("Failed to close log segment {}", file.toString(), ex);
+        }
+    }
+
+    public void markAsReadOnly() {
+        try {
+            close();
+            channel = FileChannel.open(file, StandardOpenOption.READ);
+        } catch (IOException e) {
+            throw new KiwiException(e);
         }
     }
 
