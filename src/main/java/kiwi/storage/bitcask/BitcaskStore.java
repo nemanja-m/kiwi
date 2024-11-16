@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
@@ -51,7 +52,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         LogCleaner logCleaner = new LogCleaner(
                 logDir,
                 keyDir,
-                () -> activeSegment,
+                activeSegmentSupplier(),
                 segmentNameGenerator,
                 minDirtyRatio,
                 compactionSegmentMinBytes,
@@ -139,6 +140,10 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
     @Override
     public int size() {
         return keyDir.size();
+    }
+
+    private Supplier<LogSegment> activeSegmentSupplier() {
+        return () -> activeSegment;
     }
 
     public static Builder Builder() {

@@ -89,6 +89,14 @@ class LogSegmentTest {
     }
 
     @Test
+    void testIsSamePath() {
+        LogSegment segment = LogSegment.open(root.resolve("000.log"));
+        assertTrue(segment.isSamePath(root.resolve("000.log")));
+        assertFalse(segment.isSamePath(root.resolve("001.log")));
+        assertFalse(segment.isSamePath(null));
+    }
+
+    @Test
     void testDirtyRatio() throws IOException {
         writeRecords(
                 "001.log",

@@ -158,7 +158,7 @@ public class LogCleaner {
             dirtySegments = paths
                     .filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().endsWith(".log"))
-                    .filter(path -> !path.equals(activeSegmentSupplier.get().file()))
+                    .filter(path -> !activeSegmentSupplier.get().isSamePath(path))
                     .sorted()
                     .map(path -> {
                         try {
@@ -169,7 +169,7 @@ public class LogCleaner {
                                 return segment;
                             } else if (segment.size() < compactionSegmentMinBytes) {
                                 // Compact empty or almost empty segments.
-                                logger.info("Found segment {} with {} bytes", segment.name(), segment.size());
+                                logger.info("Found small segment {} with {} bytes", segment.name(), segment.size());
                                 return segment;
                             } else {
                                 return null;

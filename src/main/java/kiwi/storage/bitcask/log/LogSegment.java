@@ -153,6 +153,10 @@ public class LogSegment {
         return file.equals(other.file);
     }
 
+    public boolean isSamePath(Path other) {
+        return file.equals(other);
+    }
+
     public double dirtyRatio(Map<Bytes, Long> keyTimestampMap) {
         long total = 0;
         long dirtyCount = 0;
