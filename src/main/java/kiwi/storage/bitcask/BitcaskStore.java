@@ -247,6 +247,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
             try (Stream<Path> paths = Files.walk(logDir)) {
                 List<Path> segmentPaths = paths.filter(Files::isRegularFile)
                         .filter(path -> path.getFileName().toString().endsWith(".log"))
+                        .sorted()
                         .toList();
 
                 ExecutorService executor = Executors.newFixedThreadPool(threads, new NamedThreadFactory("keydir"));
@@ -303,6 +304,8 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
             } catch (IOException | InterruptedException | ExecutionException ex) {
                 throw new KiwiReadException("Failed to read log directory " + logDir, ex);
             }
+
+            logger.info("Store initialized with {} entries and {} active log segment", keyDir.size(), activeSegment.name());
         }
     }
 }

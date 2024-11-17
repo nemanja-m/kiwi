@@ -142,7 +142,7 @@ class LogSegmentTest {
     }
 
     @Test
-    void testBuildKeyDir() throws IOException {
+    void testBuildKeyDirNoHints() throws IOException {
         writeRecords(
                 "001.log",
                 List.of(
@@ -151,7 +151,8 @@ class LogSegmentTest {
                         Record.of(Bytes.wrap("k1"), Bytes.wrap("v11")),
                         Record.of(Bytes.wrap("k2"), Bytes.EMPTY),
                         Record.of(Bytes.wrap("k3"), Bytes.wrap("v3"), 0L, 1L) // Expired.
-                ));
+                )
+        );
 
         LogSegment segment = LogSegment.open(root.resolve("001.log"), true);
         Map<Bytes, ValueReference> keydir = segment.buildKeyDir();
@@ -160,6 +161,41 @@ class LogSegmentTest {
         assertEquals("v11", keydir.get(Bytes.wrap("k1")).get().toString());
         assertNull(keydir.get(Bytes.wrap("k2")));
         assertNull(keydir.get(Bytes.wrap("k3")));
+    }
+
+    @Test
+    void testBuildKeyDirWithHints() throws IOException {
+        // Empty log file is created to avoid FileNotFoundException.
+        Files.createFile(root.resolve("001.log"));
+
+        // Only hint file is created to enforce reading hints.
+        writeHints(
+                "001.hint",
+                List.of(
+                        new Hint(new Header(0L, 0L, 0L, 2, 2), Header.BYTES + 2, Bytes.wrap("k1")),
+                        new Hint(new Header(0L, 0L, 0L, 2, 2), 2 * (Header.BYTES + 2) + 2, Bytes.wrap("k2")),
+                        new Hint(new Header(0L, 0L, 1L, 2, 2), 3 * (Header.BYTES + 2) + 2 * 2, Bytes.wrap("k3")) // Expired.
+                )
+        );
+
+        LogSegment segment = LogSegment.open(root.resolve("001.log"), true);
+        Map<Bytes, ValueReference> keydir = segment.buildKeyDir();
+
+        assertEquals(3, keydir.size());
+        assertNull(keydir.get(Bytes.wrap("k3")));
+
+        // Log file is populated with records to prepare data for assertions.
+        writeRecords(
+                "001.log",
+                List.of(
+                        Record.of(Bytes.wrap("k1"), Bytes.wrap("v1")),
+                        Record.of(Bytes.wrap("k2"), Bytes.wrap("v2")),
+                        Record.of(Bytes.wrap("k3"), Bytes.wrap("v3"), 0L, 1L) // Expired.
+                )
+        );
+
+        assertEquals("v1", keydir.get(Bytes.wrap("k1")).get().toString());
+        assertEquals("v2", keydir.get(Bytes.wrap("k2")).get().toString());
     }
 
     @Test
@@ -237,4 +273,15 @@ class LogSegmentTest {
         }
     }
 
+    private void writeHints(String filename, List<Hint> hints) throws IOException {
+        try (FileChannel channel = FileChannel.open(root.resolve(filename), StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
+            hints.forEach((hint) -> {
+                try {
+                    channel.write(hint.toByteBuffer());
+                } catch (IOException ex) {
+                    fail(ex);
+                }
+            });
+        }
+    }
 }

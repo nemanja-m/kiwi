@@ -4,7 +4,7 @@ import kiwi.common.Bytes;
 import kiwi.error.KiwiException;
 import kiwi.error.KiwiReadException;
 import kiwi.error.KiwiWriteException;
-import kiwi.error.SoftDeleteException;
+import kiwi.storage.Utils;
 import kiwi.storage.bitcask.Header;
 import kiwi.storage.bitcask.KeyHeader;
 import kiwi.storage.bitcask.ValueReference;
@@ -14,7 +14,9 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Clock;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -24,6 +26,8 @@ import java.util.function.Predicate;
 
 public class LogSegment {
     private static final Logger logger = LoggerFactory.getLogger(LogSegment.class);
+
+    public static final String EXTENSION = ".log";
 
     private final Path file;
     private FileChannel channel;
@@ -54,13 +58,13 @@ public class LogSegment {
                 channel = FileChannel.open(file, StandardOpenOption.READ);
             } else {
                 // File is opened for reading and writing.
-                // To prevent overwrites, position is set to the end of the file.
+                // To prevent overwrites, valuePosition is set to the end of the file.
                 channel = FileChannel.open(file, StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE);
                 channel.position(channel.size());
             }
             return new LogSegment(file, channel, clock);
         } catch (Exception ex) {
-            throw new KiwiException("Failed to open log segment " + file.toString(), ex);
+            throw new KiwiException("Failed to open log segment " + file, ex);
         }
     }
 
@@ -68,7 +72,7 @@ public class LogSegment {
         try {
             return channel.write(record.toByteBuffer());
         } catch (IOException | IllegalStateException ex) {
-            throw new KiwiWriteException("Failed to append record to log segment " + file.toString(), ex);
+            throw new KiwiWriteException("Failed to append record to log segment " + file, ex);
         }
     }
 
@@ -78,7 +82,7 @@ public class LogSegment {
             channel.read(buffer, position);
             return buffer;
         } catch (IOException | IllegalStateException ex) {
-            throw new KiwiReadException("Failed to read from log segment " + file.toString(), ex);
+            throw new KiwiReadException("Failed to read from log segment " + file, ex);
         }
     }
 
@@ -86,7 +90,7 @@ public class LogSegment {
         try {
             return channel.position();
         } catch (IOException ex) {
-            throw new KiwiReadException("Failed to get position of log segment " + file.toString(), ex);
+            throw new KiwiReadException("Failed to get valuePosition of log segment " + file, ex);
         }
     }
 
@@ -94,12 +98,12 @@ public class LogSegment {
         try {
             return channel.size();
         } catch (IOException ex) {
-            throw new KiwiReadException("Failed to get size of log segment " + file.toString(), ex);
+            throw new KiwiReadException("Failed to get size of log segment " + file, ex);
         }
     }
 
     public String name() {
-        return file.getFileName().toString().replace(".log", "");
+        return file.getFileName().toString().replace(EXTENSION, "");
     }
 
     public Path baseDir() {
@@ -112,10 +116,12 @@ public class LogSegment {
 
     public void close() {
         try {
-            channel.force(true);
-            channel.close();
+            if (channel.isOpen()) {
+                channel.force(true);
+                channel.close();
+            }
         } catch (IOException ex) {
-            logger.error("Failed to close log segment {}", file.toString(), ex);
+            logger.error("Failed to close log segment {}", file, ex);
         }
     }
 
@@ -134,22 +140,8 @@ public class LogSegment {
         String deletedFileName = file.getFileName().toString() + ".deleted";
         Path deletedFile = file.resolveSibling(deletedFileName);
 
-        try {
-            Files.move(file, deletedFile, StandardCopyOption.ATOMIC_MOVE);
-            logger.info("Marked log segment {} for deletion", file);
-        } catch (AtomicMoveNotSupportedException ex) {
-            logger.warn("Atomic move not supported, falling back to non-atomic move for {}", file);
-            try {
-                Files.move(file, deletedFile);
-                logger.info("Marked log segment {} for deletion (non-atomic)", file);
-            } catch (IOException e) {
-                logger.error("Failed to soft delete log segment {}", file, e);
-                throw new SoftDeleteException("Failed to soft delete log segment", e);
-            }
-        } catch (IOException ex) {
-            logger.error("Failed to soft delete log segment {}", file, ex);
-            throw new SoftDeleteException("Failed to soft delete log segment", ex);
-        }
+        Utils.renameFile(file, deletedFile);
+        logger.info("Marked log segment {} for deletion", file);
     }
 
     public boolean equalsTo(LogSegment other) {
@@ -234,8 +226,24 @@ public class LogSegment {
     }
 
     public Map<Bytes, ValueReference> buildKeyDir() throws KiwiReadException {
-        logger.info("Building keydir from log segment {}", file.toString());
+        String hintPath = file.getFileName().toString().replace(EXTENSION, HintSegment.EXTENSION);
+        Path hintFile = file.resolveSibling(hintPath);
 
+        if (Files.exists(hintFile)) {
+            try {
+                return buildKeyDirFromHint(hintFile);
+            } catch (KiwiReadException ex) {
+                logger.warn("Failed to build keydir from segment hint file {}", hintFile, ex);
+            }
+        }
+
+        return buildKeyDirFromData();
+    }
+
+    private Map<Bytes, ValueReference> buildKeyDirFromData() throws KiwiReadException {
+        logger.info("Building keydir from segment data file {}", file);
+
+        // Data file format: [checksum:8][timestamp:8][ttl:8][keySize:4][valueSize:4][key:keySize][value:valueSize]
         try {
             channel.position(0);
 
@@ -279,6 +287,33 @@ public class LogSegment {
         } catch (IOException | IllegalStateException ex) {
             throw new KiwiReadException("Failed to build hash table from log segment " + file, ex);
         }
+    }
+
+    private Map<Bytes, ValueReference> buildKeyDirFromHint(Path hintFile) throws KiwiReadException {
+        logger.info("Building keydir from segment hint file {}", hintFile);
+
+        HintSegment hintSegment = HintSegment.open(hintFile, true);
+
+        Map<Bytes, ValueReference> keyDir = new HashMap<>();
+        for (Hint hint : hintSegment.getHints()) {
+            // Skip the record if TTL has expired.
+            boolean expired = hint.header().ttl() > 0 && System.currentTimeMillis() > hint.header().ttl();
+
+            if (hint.header().valueSize() > 0 && !expired) {
+                ValueReference valueRef = new ValueReference(
+                        this,
+                        hint.valuePosition(),
+                        hint.header().valueSize(),
+                        hint.header().ttl(),
+                        hint.header().timestamp()
+                );
+                keyDir.put(hint.key(), valueRef);
+            } else {
+                // Skip expired records and tombstone records.
+                keyDir.put(hint.key(), null);
+            }
+        }
+        return keyDir;
     }
 
     private static class RecordIterator implements Iterator<Record> {

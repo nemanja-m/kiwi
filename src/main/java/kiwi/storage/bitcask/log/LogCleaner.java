@@ -3,6 +3,7 @@ package kiwi.storage.bitcask.log;
 import kiwi.common.Bytes;
 import kiwi.common.NamedThreadFactory;
 import kiwi.error.KiwiReadException;
+import kiwi.storage.Utils;
 import kiwi.storage.bitcask.KeyDir;
 import kiwi.storage.bitcask.ValueReference;
 import org.slf4j.Logger;
@@ -96,34 +97,63 @@ public class LogCleaner {
             return;
         }
 
-        LogSegment newSegment = null;
+        List<HintSegment> hintSegments = new ArrayList<>();
+        LogSegment newLogSegment = null;
+        HintSegment newHintSegment = null;
+
         for (LogSegment dirtySegment : dirtySegments) {
             for (Record record : dirtySegment.getActiveRecords(keyTimestampMap)) {
-                if (newSegment == null || newSegment.size() >= logSegmentBytes) {
-                    if (newSegment != null) {
-                        newSegment.close();
+                if (newLogSegment == null || newLogSegment.size() >= logSegmentBytes) {
+                    // When new segment is full, fsync and close log and hint channels.
+                    if (newLogSegment != null) {
+                        newLogSegment.close();
+                        newHintSegment.close();
                     }
-                    newSegment = LogSegment.open(segmentNameGenerator.next());
-                    logger.info("Opened new compacted log segment {}", newSegment.name());
+
+                    Path logFile = segmentNameGenerator.next();
+                    newLogSegment = LogSegment.open(logFile);
+
+                    Path hintFile = logFile.resolveSibling(newLogSegment.name() + HintSegment.PARTIAL_EXTENSION);
+                    newHintSegment = HintSegment.open(hintFile);
+                    hintSegments.add(newHintSegment);
+
+                    logger.info("Opened new compacted log segment {}", newLogSegment.name());
                 }
 
-                newSegment.append(record);
+                newLogSegment.append(record);
+
+                long valuePosition = newLogSegment.position() - record.valueSize();
+                newHintSegment.append(new Hint(record.header(), valuePosition, record.key()));
 
                 // Prevent keydir from being updated with stale values.
                 ValueReference currentValue = keyDir.get(record.key());
                 if (currentValue != null && currentValue.timestamp() <= record.header().timestamp()) {
-                    keyDir.update(record, newSegment);
+                    keyDir.update(record, newLogSegment);
                 }
             }
         }
 
-        if (newSegment != null) {
-            newSegment.close();
+        if (newLogSegment != null) {
+            newLogSegment.close();
+            newHintSegment.close();
         }
 
-        // Mark dirty segments for deletion after new segments are closed.
         for (LogSegment dirtySegment : dirtySegments) {
+            // Hint files are first marked as deleted before log files are deleted to prevent data loss.
+            // If process fails after hint file is marked as deleted but before log file is deleted,
+            // data can be recovered.
+            String hintFileName = dirtySegment.name() + HintSegment.EXTENSION;
+            Path hintFile = dirtySegment.file().resolveSibling(hintFileName);
+            if (Files.exists(hintFile)) {
+                Path deletedHintFile = hintFile.resolveSibling(hintFileName + ".deleted");
+                Utils.renameFile(hintFile, deletedHintFile);
+            }
+
             dirtySegment.markAsDeleted();
+        }
+
+        for (HintSegment hintSegment : hintSegments) {
+            hintSegment.commit();
         }
 
         logger.info("Log compaction ended");
@@ -136,9 +166,9 @@ public class LogCleaner {
                     .forEach(path -> {
                         try {
                             Files.deleteIfExists(path);
-                            logger.info("Deleted marked log segment {}", path);
+                            logger.info("Deleted marked segment {}", path);
                         } catch (IOException ex) {
-                            logger.warn("Failed to delete dirty segments", ex);
+                            logger.warn("Failed to delete segments", ex);
                         }
                     });
         } catch (IOException ex) {
