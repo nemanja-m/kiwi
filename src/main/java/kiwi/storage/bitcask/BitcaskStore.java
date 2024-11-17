@@ -1,6 +1,7 @@
 package kiwi.storage.bitcask;
 
 import kiwi.common.Bytes;
+import kiwi.common.NamedThreadFactory;
 import kiwi.config.Options;
 import kiwi.error.KiwiException;
 import kiwi.error.KiwiReadException;
@@ -18,10 +19,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
@@ -165,6 +167,8 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         private long compactionSegmentMinBytes;
         private Duration compactionInterval;
         private double minDirtyRatio;
+        private int threads;
+
         private Clock clock = Clock.systemUTC();
         private KeyDir keyDir;
         private LogSegment activeSegment;
@@ -184,6 +188,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
             this.compactionSegmentMinBytes = config.log.compaction.segmentMinBytes;
             this.compactionInterval = config.log.compaction.interval;
             this.minDirtyRatio = config.log.compaction.minDirtyRatio;
+            this.threads = config.log.keyDirBuilderThreads;
         }
 
         public Builder withLogDir(Path logDir) {
@@ -243,25 +248,40 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
                         .toList();
 
                 keyDir = new KeyDir();
-                for (Path segmentPath : segmentPaths) {
-                    LogSegment segment;
-                    if (segmentPath.equals(segmentPaths.getLast())) {
-                        activeSegment = LogSegment.open(segmentPath);
-                        segment = activeSegment;
-                    } else {
-                        segment = LogSegment.open(segmentPath, true);
-                    }
 
-                    for (Map.Entry<Bytes, ValueReference> entry : segment.buildKeyDir().entrySet()) {
-                        Bytes key = entry.getKey();
-                        ValueReference value = entry.getValue();
-                        if (value == null) {
-                            keyDir.remove(key);
+                ExecutorService executor = Executors.newFixedThreadPool(threads, new NamedThreadFactory("keydir-builder"));
+                List<Future<?>> futures = new ArrayList<>();
+
+                for (Path segmentPath : segmentPaths) {
+                    futures.add(executor.submit(() -> {
+                        LogSegment segment;
+                        if (segmentPath.equals(segmentPaths.getLast())) {
+                            activeSegment = LogSegment.open(segmentPath);
+                            segment = activeSegment;
                         } else {
-                            keyDir.put(key, value);
+                            segment = LogSegment.open(segmentPath, true);
                         }
-                    }
+
+                        for (Map.Entry<Bytes, ValueReference> entry : segment.buildKeyDir().entrySet()) {
+                            Bytes key = entry.getKey();
+                            ValueReference value = entry.getValue();
+
+                            // keyDir is a concurrent map, so we can safely update it without synchronization.
+                            if (value == null) {
+                                keyDir.remove(key);
+                            } else {
+                                keyDir.put(key, value);
+                            }
+                        }
+                    }));
                 }
+
+                // Wait for all tasks to complete
+                for (Future<?> future : futures) {
+                    future.get();
+                }
+                executor.shutdown();
+
                 // Remove tombstones.
                 keyDir.values().removeIf(Objects::isNull);
 
@@ -270,10 +290,9 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
                     Path activeSegmentPath = new LogSegmentNameGenerator(logDir).next();
                     activeSegment = LogSegment.open(activeSegmentPath);
                 }
-            } catch (IOException ex) {
+            } catch (IOException | InterruptedException | ExecutionException ex) {
                 throw new KiwiReadException("Failed to read log directory " + logDir, ex);
             }
         }
     }
-
 }

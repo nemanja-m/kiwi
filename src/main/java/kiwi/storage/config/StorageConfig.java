@@ -9,5 +9,4 @@ public class StorageConfig {
     public StorageConfig(Config config) {
         this.log = new LogConfig(config.getConfig("log"));
     }
-
 }

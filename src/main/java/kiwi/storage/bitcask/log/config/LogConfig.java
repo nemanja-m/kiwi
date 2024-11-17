@@ -8,11 +8,13 @@ import java.time.Duration;
 public class LogConfig {
     public final Path dir;
     public final long segmentBytes;
+    public final int keyDirBuilderThreads;
     public final Compaction compaction;
 
     public LogConfig(Config config) {
         this.dir = Path.of(config.getString("dir"));
         this.segmentBytes = config.getLong("segment.bytes");
+        this.keyDirBuilderThreads = config.getInt("keydir.builder.threads");
         this.compaction = new Compaction(config.getConfig("compaction"));
     }
 
