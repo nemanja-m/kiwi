@@ -7,13 +7,13 @@ import kiwi.storage.bitcask.log.Record;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-public record ValueReference(LogSegment segment, long offset, int valueSize, long ttl,
+public record ValueReference(LogSegment segment, long position, int valueSize, long ttl,
                              long timestamp) {
 
-    public static ValueReference of(LogSegment segment, long offset, Record record) {
+    public static ValueReference of(LogSegment segment, long position, Record record) {
         return new ValueReference(
                 segment,
-                offset,
+                position,
                 record.valueSize(),
                 record.header().ttl(),
                 record.header().timestamp()
@@ -21,7 +21,7 @@ public record ValueReference(LogSegment segment, long offset, int valueSize, lon
     }
 
     public Bytes get() throws IOException {
-        ByteBuffer buffer = segment.read(offset, valueSize);
+        ByteBuffer buffer = segment.read(position, valueSize);
         return Bytes.wrap(buffer.array());
     }
 

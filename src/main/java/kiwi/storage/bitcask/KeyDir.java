@@ -12,8 +12,8 @@ public class KeyDir extends ConcurrentHashMap<Bytes, ValueReference> {
         if (record.isTombstone()) {
             super.remove(record.key());
         } else {
-            long offset = segment.position() - record.valueSize();
-            ValueReference valueRef = ValueReference.of(segment, offset, record);
+            long position = segment.position() - record.valueSize();
+            ValueReference valueRef = ValueReference.of(segment, position, record);
             super.put(record.key(), valueRef);
         }
     }

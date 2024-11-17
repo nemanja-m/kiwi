@@ -1,6 +1,7 @@
 package kiwi.storage.bitcask.log;
 
 import kiwi.common.Bytes;
+import kiwi.common.NamedThreadFactory;
 import kiwi.error.KiwiReadException;
 import kiwi.storage.bitcask.KeyDir;
 import kiwi.storage.bitcask.ValueReference;
@@ -52,7 +53,7 @@ public class LogCleaner {
         this.compactionSegmentMinBytes = compactionSegmentMinBytes;
         this.logSegmentBytes = logSegmentBytes;
 
-        this.executor = Executors.newScheduledThreadPool(2);
+        this.executor = Executors.newScheduledThreadPool(1, new NamedThreadFactory("cleaner"));
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             logger.info("Shutting down log cleaner");
