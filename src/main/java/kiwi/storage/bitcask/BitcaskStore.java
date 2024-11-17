@@ -249,7 +249,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
 
                 keyDir = new KeyDir();
 
-                ExecutorService executor = Executors.newFixedThreadPool(threads, new NamedThreadFactory("keydir-builder"));
+                ExecutorService executor = Executors.newFixedThreadPool(threads, new NamedThreadFactory("keydir"));
                 List<Future<?>> futures = new ArrayList<>();
 
                 for (Path segmentPath : segmentPaths) {
