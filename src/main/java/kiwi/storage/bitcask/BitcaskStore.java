@@ -52,16 +52,18 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         this.logSegmentBytes = logSegmentBytes;
         this.segmentNameGenerator = LogSegmentNameGenerator.from(activeSegment);
 
-        LogCleaner logCleaner = new LogCleaner(
-                logDir,
-                keyDir,
-                activeSegmentSupplier(),
-                segmentNameGenerator,
-                minDirtyRatio,
-                compactionSegmentMinBytes,
-                logSegmentBytes);
+        if (!compactionInterval.isZero()) {
+            LogCleaner logCleaner = new LogCleaner(
+                    logDir,
+                    keyDir,
+                    activeSegmentSupplier(),
+                    segmentNameGenerator,
+                    minDirtyRatio,
+                    compactionSegmentMinBytes,
+                    logSegmentBytes);
 
-        logCleaner.start(compactionInterval);
+            logCleaner.start(compactionInterval);
+        }
     }
 
     public static BitcaskStore open() {

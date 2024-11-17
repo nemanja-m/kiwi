@@ -1,28 +1,22 @@
 package kiwi.storage.bitcask.log;
 
+import kiwi.LogSegmentSupport;
 import kiwi.common.Bytes;
 import kiwi.error.KiwiWriteException;
 import kiwi.storage.bitcask.Header;
 import kiwi.storage.bitcask.ValueReference;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
-import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-
-class LogSegmentTest {
-
-    @TempDir
-    Path root;
+class LogSegmentTest extends LogSegmentSupport {
 
     @Test
     void testName() {
@@ -151,8 +145,7 @@ class LogSegmentTest {
                         Record.of(Bytes.wrap("k1"), Bytes.wrap("v11")),
                         Record.of(Bytes.wrap("k2"), Bytes.EMPTY),
                         Record.of(Bytes.wrap("k3"), Bytes.wrap("v3"), 0L, 1L) // Expired.
-                )
-        );
+                ));
 
         LogSegment segment = LogSegment.open(root.resolve("001.log"), true);
         Map<Bytes, ValueReference> keydir = segment.buildKeyDir();
@@ -175,8 +168,7 @@ class LogSegmentTest {
                         new Hint(new Header(0L, 0L, 0L, 2, 2), Header.BYTES + 2, Bytes.wrap("k1")),
                         new Hint(new Header(0L, 0L, 0L, 2, 2), 2 * (Header.BYTES + 2) + 2, Bytes.wrap("k2")),
                         new Hint(new Header(0L, 0L, 1L, 2, 2), 3 * (Header.BYTES + 2) + 2 * 2, Bytes.wrap("k3")) // Expired.
-                )
-        );
+                ));
 
         LogSegment segment = LogSegment.open(root.resolve("001.log"), true);
         Map<Bytes, ValueReference> keydir = segment.buildKeyDir();
@@ -191,8 +183,7 @@ class LogSegmentTest {
                         Record.of(Bytes.wrap("k1"), Bytes.wrap("v1")),
                         Record.of(Bytes.wrap("k2"), Bytes.wrap("v2")),
                         Record.of(Bytes.wrap("k3"), Bytes.wrap("v3"), 0L, 1L) // Expired.
-                )
-        );
+                ));
 
         assertEquals("v1", keydir.get(Bytes.wrap("k1")).get().toString());
         assertEquals("v2", keydir.get(Bytes.wrap("k2")).get().toString());
@@ -240,9 +231,7 @@ class LogSegmentTest {
         assertDoesNotThrow(() -> {
             segment.read(0, Header.BYTES);
         });
-        assertThrows(KiwiWriteException.class, () -> {
-            segment.append(Record.of(Bytes.wrap("k3"), Bytes.wrap("v3")));
-        });
+        assertThrows(KiwiWriteException.class, () -> segment.append(Record.of(Bytes.wrap("k3"), Bytes.wrap("v3"))));
     }
 
     @Test
@@ -259,29 +248,5 @@ class LogSegmentTest {
 
         assertTrue(Files.exists(root.resolve("000.log.deleted")));
         assertFalse(Files.exists(root.resolve("000.log")));
-    }
-
-    private void writeRecords(String filename, List<Record> records) throws IOException {
-        try (FileChannel channel = FileChannel.open(root.resolve(filename), StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
-            records.forEach((record) -> {
-                try {
-                    channel.write(record.toByteBuffer());
-                } catch (IOException ex) {
-                    fail(ex);
-                }
-            });
-        }
-    }
-
-    private void writeHints(String filename, List<Hint> hints) throws IOException {
-        try (FileChannel channel = FileChannel.open(root.resolve(filename), StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
-            hints.forEach((hint) -> {
-                try {
-                    channel.write(hint.toByteBuffer());
-                } catch (IOException ex) {
-                    fail(ex);
-                }
-            });
-        }
     }
 }
