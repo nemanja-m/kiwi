@@ -1,6 +1,7 @@
 package kiwi.storage.bitcask;
 
 import kiwi.common.Bytes;
+import kiwi.common.KeyValue;
 import kiwi.common.NamedThreadFactory;
 import kiwi.config.Options;
 import kiwi.error.KiwiException;
@@ -241,16 +242,15 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
                 throw new KiwiException("Failed to create log directory " + logDir, ex);
             }
 
+            logger.info("Building keydir from log directory {}", logDir.normalize().toAbsolutePath());
+
             try (Stream<Path> paths = Files.walk(logDir)) {
                 List<Path> segmentPaths = paths.filter(Files::isRegularFile)
                         .filter(path -> path.getFileName().toString().endsWith(".log"))
-                        .sorted()
                         .toList();
 
-                keyDir = new KeyDir();
-
                 ExecutorService executor = Executors.newFixedThreadPool(threads, new NamedThreadFactory("keydir"));
-                List<Future<?>> futures = new ArrayList<>();
+                List<Future<KeyValue<Path, Map<Bytes, ValueReference>>>> futures = new ArrayList<>();
 
                 for (Path segmentPath : segmentPaths) {
                     futures.add(executor.submit(() -> {
@@ -261,26 +261,36 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
                         } else {
                             segment = LogSegment.open(segmentPath, true);
                         }
-
-                        for (Map.Entry<Bytes, ValueReference> entry : segment.buildKeyDir().entrySet()) {
-                            Bytes key = entry.getKey();
-                            ValueReference value = entry.getValue();
-
-                            // keyDir is a concurrent map, so we can safely update it without synchronization.
-                            if (value == null) {
-                                keyDir.remove(key);
-                            } else {
-                                keyDir.put(key, value);
-                            }
-                        }
+                        Map<Bytes, ValueReference> partialKeyDir = segment.buildKeyDir();
+                        return KeyValue.of(segmentPath, partialKeyDir);
                     }));
                 }
 
                 // Wait for all tasks to complete
-                for (Future<?> future : futures) {
-                    future.get();
+                List<KeyValue<Path, Map<Bytes, ValueReference>>> results = new ArrayList<>();
+                for (Future<KeyValue<Path, Map<Bytes, ValueReference>>> future : futures) {
+                    results.add(future.get());
                 }
                 executor.shutdown();
+
+                // Collect all key-value pairs from all segments ordered by segment number.
+                // This is necessary to ensure that the latest value for a key is retained.
+                keyDir = new KeyDir();
+
+                results.stream()
+                        .sorted(Comparator.comparing(KeyValue::key))
+                        .map(KeyValue::value)
+                        .forEach(partialKeyDir -> {
+                            for (Map.Entry<Bytes, ValueReference> entry : partialKeyDir.entrySet()) {
+                                Bytes key = entry.getKey();
+                                ValueReference value = entry.getValue();
+                                if (value == null) {
+                                    keyDir.remove(key);
+                                } else {
+                                    keyDir.put(key, value);
+                                }
+                            }
+                        });
 
                 // Remove tombstones.
                 keyDir.values().removeIf(Objects::isNull);
