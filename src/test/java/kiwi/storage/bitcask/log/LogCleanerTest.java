@@ -68,7 +68,8 @@ class LogCleanerTest extends LogSegmentSupport {
                 nameGenerator,
                 0.25,
                 0,
-                segmentBytes
+                segmentBytes,
+                1
         );
 
         cleaner.compactLog();

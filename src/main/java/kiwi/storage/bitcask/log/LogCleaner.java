@@ -13,13 +13,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -36,6 +31,7 @@ public class LogCleaner {
     private final double minDirtyRatio;
     private final long compactionSegmentMinBytes;
     private final long logSegmentBytes;
+    private final int threads;
     private final ScheduledExecutorService executor;
 
     public LogCleaner(
@@ -45,7 +41,8 @@ public class LogCleaner {
             LogSegmentNameGenerator segmentNameGenerator,
             double minDirtyRatio,
             long compactionSegmentMinBytes,
-            long logSegmentBytes) {
+            long logSegmentBytes,
+            int threads) {
         this.logDir = logDir;
         this.keyDir = keyDir;
         this.activeSegmentSupplier = activeSegmentSupplier;
@@ -53,6 +50,7 @@ public class LogCleaner {
         this.minDirtyRatio = minDirtyRatio;
         this.compactionSegmentMinBytes = compactionSegmentMinBytes;
         this.logSegmentBytes = logSegmentBytes;
+        this.threads = threads;
 
         this.executor = Executors.newScheduledThreadPool(1, new NamedThreadFactory("cleaner"));
 
@@ -183,15 +181,14 @@ public class LogCleaner {
     }
 
     private List<LogSegment> findDirtySegments(Map<Bytes, Long> keyTimestampMap) {
-        List<LogSegment> dirtySegments = new ArrayList<>();
+        ExecutorService executor = Executors.newFixedThreadPool(threads, new NamedThreadFactory("compaction"));
 
+        List<LogSegment> dirtySegments = new ArrayList<>();
         try (Stream<Path> paths = Files.walk(logDir)) {
-            dirtySegments = paths
-                    .filter(Files::isRegularFile)
+            dirtySegments = paths.filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().endsWith(".log"))
                     .filter(path -> !activeSegmentSupplier.get().isSamePath(path))
-                    .sorted()
-                    .map(path -> {
+                    .map(path -> executor.submit(() -> {
                         try {
                             LogSegment segment = LogSegment.open(path, true);
                             double ratio = segment.dirtyRatio(keyTimestampMap);
@@ -209,17 +206,28 @@ public class LogCleaner {
                             logger.warn("Failed to read log segment {}", path, ex);
                             return null;
                         }
+                    }))
+                    .map(future -> {
+                        try {
+                            return future.get();
+                        } catch (InterruptedException | ExecutionException ex) {
+                            logger.error("Failed to mark dirty segments", ex);
+                            return null;
+                        }
                     })
                     .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
+                    .sorted(Comparator.comparing(LogSegment::name))
+                    .toList();
         } catch (IOException ex) {
             logger.error("Failed to mark dirty segments", ex);
         }
 
+        executor.shutdown();
+
         // Prevents infinite compaction loop when only one dirty segment is found.
         if (dirtySegments.size() == 1 && dirtySegments.getFirst().size() < compactionSegmentMinBytes) {
             logger.info("Single dirty segment found with {} bytes. Skipping compaction.", dirtySegments.getFirst().size());
-            dirtySegments.clear();
+            dirtySegments = Collections.emptyList();
         }
 
         return dirtySegments;

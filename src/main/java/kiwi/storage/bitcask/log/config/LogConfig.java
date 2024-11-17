@@ -22,11 +22,13 @@ public class LogConfig {
         public final Duration interval;
         public final double minDirtyRatio;
         public final long segmentMinBytes;
+        public final int threads;
 
         public Compaction(Config config) {
             this.interval = config.getDuration("interval");
             this.minDirtyRatio = config.getDouble("min.dirty.ratio");
             this.segmentMinBytes = config.getLong("segment.min.bytes");
+            this.threads = config.getInt("threads");
         }
     }
 }

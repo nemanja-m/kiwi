@@ -38,14 +38,15 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
     private final LogSegmentNameGenerator segmentNameGenerator;
 
     private BitcaskStore(
+            Path logDir,
             KeyDir keyDir,
             LogSegment activeSegment,
             Clock clock,
-            Path logDir,
             long logSegmentBytes,
             long compactionSegmentMinBytes,
             Duration compactionInterval,
-            double minDirtyRatio) {
+            double minDirtyRatio,
+            int compactionThreads) {
         this.keyDir = keyDir;
         this.activeSegment = activeSegment;
         this.clock = clock;
@@ -60,7 +61,8 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
                     segmentNameGenerator,
                     minDirtyRatio,
                     compactionSegmentMinBytes,
-                    logSegmentBytes);
+                    logSegmentBytes,
+                    compactionThreads);
 
             logCleaner.start(compactionInterval);
         }
@@ -166,15 +168,15 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
     public static class Builder {
 
         private Path logDir;
+        private KeyDir keyDir;
+        private LogSegment activeSegment;
+        private Clock clock = Clock.systemUTC();
+        private int keyDirBuilderThreads;
         private long logSegmentBytes;
         private long compactionSegmentMinBytes;
         private Duration compactionInterval;
         private double minDirtyRatio;
-        private int threads;
-
-        private Clock clock = Clock.systemUTC();
-        private KeyDir keyDir;
-        private LogSegment activeSegment;
+        private int compactionThreads;
 
         Builder() {
             this(Options.defaults.storage);
@@ -187,15 +189,21 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
 
         Builder(StorageConfig config) {
             this.logDir = config.log.dir;
+            this.keyDirBuilderThreads = config.log.keyDirBuilderThreads;
             this.logSegmentBytes = config.log.segmentBytes;
             this.compactionSegmentMinBytes = config.log.compaction.segmentMinBytes;
             this.compactionInterval = config.log.compaction.interval;
             this.minDirtyRatio = config.log.compaction.minDirtyRatio;
-            this.threads = config.log.keyDirBuilderThreads;
+            this.compactionThreads = config.log.compaction.threads;
         }
 
         public Builder withLogDir(Path logDir) {
             this.logDir = logDir;
+            return this;
+        }
+
+        public Builder withKeyDirBuilderThreads(int threads) {
+            this.keyDirBuilderThreads = threads;
             return this;
         }
 
@@ -219,6 +227,11 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
             return this;
         }
 
+        public Builder withCompcationThreads(int threads) {
+            this.compactionThreads = threads;
+            return this;
+        }
+
         public Builder withClock(Clock clock) {
             this.clock = clock;
             return this;
@@ -227,14 +240,15 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         public BitcaskStore build() {
             init(logDir);
             return new BitcaskStore(
+                    logDir,
                     keyDir,
                     activeSegment,
                     clock,
-                    logDir,
                     logSegmentBytes,
                     compactionSegmentMinBytes,
                     compactionInterval,
-                    minDirtyRatio);
+                    minDirtyRatio,
+                    compactionThreads);
         }
 
         private void init(Path logDir) {
@@ -252,7 +266,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
                         .sorted()
                         .toList();
 
-                ExecutorService executor = Executors.newFixedThreadPool(threads, new NamedThreadFactory("keydir"));
+                ExecutorService executor = Executors.newFixedThreadPool(keyDirBuilderThreads, new NamedThreadFactory("keydir"));
                 List<Future<KeyValue<Path, Map<Bytes, ValueReference>>>> futures = new ArrayList<>();
 
                 for (Path segmentPath : segmentPaths) {
