@@ -12,7 +12,7 @@ import java.util.Optional;
 public class Kiwi {
 
     public static void main(String[] args) {
-        KiwiStore store = KiwiStore.open(Paths.get("./db"));
+        KiwiStore store = KiwiStore.open(Paths.get("db").normalize());
 
         System.out.println("\n-------");
         System.out.println("KiwiDB");

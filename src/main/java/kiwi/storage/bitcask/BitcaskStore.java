@@ -227,7 +227,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
             return this;
         }
 
-        public Builder withCompcationThreads(int threads) {
+        public Builder withCompactionThreads(int threads) {
             this.compactionThreads = threads;
             return this;
         }
