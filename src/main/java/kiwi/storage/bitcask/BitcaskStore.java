@@ -30,7 +30,7 @@ import java.util.concurrent.Future;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
-public class BitcaskStore implements KeyValueStore<Bytes, Bytes>, AutoCloseable {
+public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
     private static final Logger logger = LoggerFactory.getLogger(BitcaskStore.class);
 
     private final KeyDir keyDir;
@@ -131,7 +131,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes>, AutoCloseable 
         maybeRollSegment();
     }
 
-    private void maybeRollSegment() {
+    private synchronized void maybeRollSegment() {
         if (shouldRoll()) {
             activeSegment.markAsReadOnly();
             activeSegment = LogSegment.open(segmentNameGenerator.next());
