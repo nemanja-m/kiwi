@@ -114,10 +114,18 @@ public class LogSegment {
         return file;
     }
 
+    public void sync() {
+        try {
+            channel.force(false);
+        } catch (IOException ex) {
+            logger.error("Failed to sync log segment {}", file, ex);
+        }
+    }
+
     public void close() {
         try {
             if (channel.isOpen()) {
-                channel.force(true);
+                sync();
                 channel.close();
             }
         } catch (IOException ex) {
