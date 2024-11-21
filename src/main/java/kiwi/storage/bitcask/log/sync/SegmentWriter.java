@@ -23,12 +23,18 @@ public abstract class SegmentWriter implements AutoCloseable {
      * @param record the record to append
      * @throws KiwiWriteException if an error occurs while writing the record
      */
-    public void append(Record record) throws KiwiWriteException {
-        activeSegment().append(record);
+    public int append(Record record) throws KiwiWriteException {
+        if (closed.get()) {
+            throw new KiwiWriteException("Segment writer is closed");
+        }
+
+        return activeSegment().append(record);
     }
 
     protected void sync() {
-        activeSegment().sync();
+        if (!closed.get()) {
+            activeSegment().sync();
+        }
     }
 
     protected LogSegment activeSegment() {

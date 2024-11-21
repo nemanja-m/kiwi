@@ -86,36 +86,6 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes>, AutoCloseable 
     }
 
     @Override
-    public void put(Bytes key, Bytes value) {
-        put(key, value, 0L);
-    }
-
-    @Override
-    public void put(Bytes key, Bytes value, long ttl) {
-        Objects.requireNonNull(key, "key cannot be null");
-        Record record = Record.of(key, value, clock.millis(), ttl);
-        int written = activeSegment.append(record);
-        if (written > 0) {
-            keyDir.update(record, activeSegment);
-        } else {
-            throw new KiwiException("Failed to write to segment");
-        }
-        maybeRollSegment();
-    }
-
-    private void maybeRollSegment() {
-        if (shouldRoll()) {
-            activeSegment.markAsReadOnly();
-            activeSegment = LogSegment.open(segmentNameGenerator.next());
-            logger.info("Opened new log segment {}", activeSegment.name());
-        }
-    }
-
-    private boolean shouldRoll() {
-        return activeSegment.size() >= logSegmentBytes;
-    }
-
-    @Override
     public Optional<Bytes> get(Bytes key) {
         Objects.requireNonNull(key, "key cannot be null");
         ValueReference valueRef = keyDir.get(key);
@@ -138,9 +108,39 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes>, AutoCloseable 
     }
 
     @Override
+    public void put(Bytes key, Bytes value) {
+        put(key, value, 0L);
+    }
+
+    @Override
     public void delete(Bytes key) {
         Objects.requireNonNull(key, "key cannot be null");
         put(key, Record.TOMBSTONE);
+    }
+
+    @Override
+    public void put(Bytes key, Bytes value, long ttl) {
+        Objects.requireNonNull(key, "key cannot be null");
+        Record record = Record.of(key, value, clock.millis(), ttl);
+        int written = writer.append(record);
+        if (written > 0) {
+            keyDir.update(record, activeSegment);
+        } else {
+            throw new KiwiException("Failed to write to segment");
+        }
+        maybeRollSegment();
+    }
+
+    private void maybeRollSegment() {
+        if (shouldRoll()) {
+            activeSegment.markAsReadOnly();
+            activeSegment = LogSegment.open(segmentNameGenerator.next());
+            logger.info("Opened new log segment {}", activeSegment.name());
+        }
+    }
+
+    private boolean shouldRoll() {
+        return activeSegment.size() >= logSegmentBytes;
     }
 
     @Override

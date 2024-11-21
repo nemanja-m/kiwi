@@ -21,11 +21,11 @@ public class PeriodicSegmentWriter extends SegmentWriter {
         super(activeSegmentSupplier);
 
         this.syncInterval = syncInterval;
-        this.scheduler = Executors.newSingleThreadScheduledExecutor(NamedThreadFactory.create("periodic-sync"));
+        this.scheduler = Executors.newSingleThreadScheduledExecutor(NamedThreadFactory.create("sync"));
         this.scheduler.scheduleAtFixedRate(() -> {
                     if (!closed.get()) {
                         sync();
-                        logger.info("Synced active segment");
+                        logger.trace("Synced active segment {}", activeSegment().name());
                     }
                 },
                 syncInterval.toMillis(),
