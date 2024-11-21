@@ -19,7 +19,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class LogCleaner {
+public class LogCleaner implements AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(LogCleaner.class);
 
     private static final double JITTER = 0.3;
@@ -32,7 +32,7 @@ public class LogCleaner {
     private final long compactionSegmentMinBytes;
     private final long logSegmentBytes;
     private final int threads;
-    private final ScheduledExecutorService executor;
+    private final ScheduledExecutorService scheduler;
 
     public LogCleaner(
             Path logDir,
@@ -52,30 +52,23 @@ public class LogCleaner {
         this.logSegmentBytes = logSegmentBytes;
         this.threads = threads;
 
-        this.executor = Executors.newScheduledThreadPool(1, new NamedThreadFactory("cleaner"));
+        this.scheduler = Executors.newSingleThreadScheduledExecutor(NamedThreadFactory.create("cleaner"));
 
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            logger.info("Shutting down log cleaner");
-            executor.shutdown();
-            try {
-                if (!executor.awaitTermination(3, TimeUnit.MINUTES)) {
-                    logger.warn("Log cleaner did not shutdown in time. Forcing shutdown.");
-                    executor.shutdownNow();
-                }
-            } catch (InterruptedException ex) {
-                logger.error("Failed to shutdown log cleaner", ex);
-                executor.shutdownNow();
-            }
-        }));
+        Runtime.getRuntime().addShutdownHook(new Thread(this::close));
     }
 
     public void start(Duration interval) {
+        if (interval.isZero()) {
+            logger.info("Log cleaner is disabled");
+            return;
+        }
+
         // Add some jitter to prevent all log cleaners from running at the same time.
         long compactIntervalSeconds = intervalWithJitterSeconds(interval);
         long cleanIntervalSeconds = intervalWithJitterSeconds(interval);
 
-        executor.scheduleAtFixedRate(this::compactLog, compactIntervalSeconds, compactIntervalSeconds, TimeUnit.SECONDS);
-        executor.scheduleAtFixedRate(this::cleanLog, 0, cleanIntervalSeconds, TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(this::compactLog, compactIntervalSeconds, compactIntervalSeconds, TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(this::cleanLog, 0, cleanIntervalSeconds, TimeUnit.SECONDS);
     }
 
     private long intervalWithJitterSeconds(Duration interval) {
@@ -231,5 +224,20 @@ public class LogCleaner {
         }
 
         return dirtySegments;
+    }
+
+    @Override
+    public void close() {
+        logger.info("Shutting down log cleaner");
+        scheduler.shutdown();
+        try {
+            if (!scheduler.awaitTermination(3, TimeUnit.MINUTES)) {
+                logger.warn("Log cleaner did not shutdown in time. Forcing shutdown.");
+                scheduler.shutdownNow();
+            }
+        } catch (InterruptedException ex) {
+            logger.error("Failed to shutdown log cleaner", ex);
+            scheduler.shutdownNow();
+        }
     }
 }

@@ -11,6 +11,8 @@ import kiwi.storage.bitcask.log.LogCleaner;
 import kiwi.storage.bitcask.log.LogSegment;
 import kiwi.storage.bitcask.log.LogSegmentNameGenerator;
 import kiwi.storage.bitcask.log.Record;
+import kiwi.storage.bitcask.log.sync.SegmentWriter;
+import kiwi.storage.bitcask.log.sync.SegmentWriterFactory;
 import kiwi.storage.config.StorageConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,7 +30,7 @@ import java.util.concurrent.Future;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
-public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
+public class BitcaskStore implements KeyValueStore<Bytes, Bytes>, AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(BitcaskStore.class);
 
     private final KeyDir keyDir;
@@ -36,6 +38,8 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
     private final Clock clock;
     private final long logSegmentBytes;
     private final LogSegmentNameGenerator segmentNameGenerator;
+    private final LogCleaner logCleaner;
+    private final SegmentWriter writer;
 
     private BitcaskStore(
             Path logDir,
@@ -46,26 +50,27 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
             long compactionSegmentMinBytes,
             Duration compactionInterval,
             double minDirtyRatio,
-            int compactionThreads) {
+            int compactionThreads,
+            SegmentWriterFactory writerFactory) {
         this.keyDir = keyDir;
         this.activeSegment = activeSegment;
         this.clock = clock;
         this.logSegmentBytes = logSegmentBytes;
         this.segmentNameGenerator = LogSegmentNameGenerator.from(activeSegment);
 
-        if (!compactionInterval.isZero()) {
-            LogCleaner logCleaner = new LogCleaner(
-                    logDir,
-                    keyDir,
-                    activeSegmentSupplier(),
-                    segmentNameGenerator,
-                    minDirtyRatio,
-                    compactionSegmentMinBytes,
-                    logSegmentBytes,
-                    compactionThreads);
+        this.logCleaner = new LogCleaner(
+                logDir,
+                keyDir,
+                activeSegmentSupplier(),
+                segmentNameGenerator,
+                minDirtyRatio,
+                compactionSegmentMinBytes,
+                logSegmentBytes,
+                compactionThreads);
 
-            logCleaner.start(compactionInterval);
-        }
+        this.logCleaner.start(compactionInterval);
+
+        this.writer = writerFactory.create(activeSegmentSupplier());
     }
 
     public static BitcaskStore open() {
@@ -153,6 +158,12 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         return () -> activeSegment;
     }
 
+    @Override
+    public void close() {
+        logCleaner.close();
+        writer.close();
+    }
+
     public static Builder Builder() {
         return new Builder();
     }
@@ -177,6 +188,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         private Duration compactionInterval;
         private double minDirtyRatio;
         private int compactionThreads;
+        private SegmentWriterFactory writerFactory;
 
         Builder() {
             this(Options.defaults.storage);
@@ -195,6 +207,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
             this.compactionInterval = config.log.compaction.interval;
             this.minDirtyRatio = config.log.compaction.minDirtyRatio;
             this.compactionThreads = config.log.compaction.threads;
+            this.writerFactory = new SegmentWriterFactory(config.log.sync);
         }
 
         public Builder withLogDir(Path logDir) {
@@ -248,7 +261,8 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
                     compactionSegmentMinBytes,
                     compactionInterval,
                     minDirtyRatio,
-                    compactionThreads);
+                    compactionThreads,
+                    writerFactory);
         }
 
         private void init(Path logDir) {

@@ -4,7 +4,6 @@ import com.typesafe.config.Config;
 
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.Set;
 
 public class LogConfig {
     public final Path dir;
@@ -22,17 +21,22 @@ public class LogConfig {
     }
 
     public static class Sync {
-        public final String mode;
+        public enum Mode {
+            PERIODIC, BATCH, LAZY
+        }
+
+        public final Mode mode;
         public final Duration interval;
         public final Duration window;
 
-        private static final Set<String> MODES = Set.of("periodic", "batch", "lazy");
-
         public Sync(Config config) {
-            this.mode = config.getString("mode").toLowerCase();
-            if (!MODES.contains(this.mode)) {
-                throw new IllegalArgumentException("Invalid sync mode: " + this.mode);
+            String mode = config.getString("mode").toUpperCase();
+            try {
+                this.mode = Mode.valueOf(mode);
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Invalid sync mode: " + mode);
             }
+
             this.interval = config.getDuration("periodic.interval");
             this.window = config.getDuration("batch.window");
         }
