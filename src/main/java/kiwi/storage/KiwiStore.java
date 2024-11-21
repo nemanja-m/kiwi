@@ -56,4 +56,9 @@ public class KiwiStore implements KeyValueStore<Bytes, Bytes> {
     public int size() {
         return store.size();
     }
+
+    @Override
+    public void close() throws Exception {
+        store.close();
+    }
 }

@@ -2,7 +2,7 @@ package kiwi.storage;
 
 import java.util.Optional;
 
-public interface KeyValueStore<K, V> {
+public interface KeyValueStore<K, V> extends AutoCloseable {
     void put(K key, V value);
 
     void put(K key, V value, long ttl);

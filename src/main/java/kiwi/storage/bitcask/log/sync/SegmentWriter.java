@@ -41,6 +41,7 @@ public abstract class SegmentWriter implements AutoCloseable {
         return activeSegmentSupplier.get();
     }
 
+    @Override
     public void close() {
         if (closed.compareAndSet(false, true)) {
             activeSegment().close();

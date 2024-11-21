@@ -174,7 +174,7 @@ public class LogCleaner implements AutoCloseable {
     }
 
     private List<LogSegment> findDirtySegments(Map<Bytes, Long> keyTimestampMap) {
-        ExecutorService executor = Executors.newFixedThreadPool(threads, new NamedThreadFactory("compaction"));
+        ExecutorService executor = Executors.newFixedThreadPool(threads, NamedThreadFactory.create("compaction"));
 
         List<LogSegment> dirtySegments = new ArrayList<>();
         try (Stream<Path> paths = Files.walk(logDir)) {

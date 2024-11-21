@@ -68,7 +68,7 @@ public class BatchSegmentWriter extends SegmentWriter {
                 request.markSynced(written);
             }
 
-            logger.info("Synced active segment with batch of {} writes", batch.size());
+            logger.trace("Synced active segment with batch of {} records", batch.size());
         } catch (KiwiWriteException ex) {
             handleSyncFailure(ex);
         }

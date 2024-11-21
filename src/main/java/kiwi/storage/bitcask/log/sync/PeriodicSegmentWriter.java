@@ -14,13 +14,11 @@ import java.util.function.Supplier;
 public class PeriodicSegmentWriter extends SegmentWriter {
     private static final Logger logger = LoggerFactory.getLogger(PeriodicSegmentWriter.class);
 
-    private final Duration syncInterval;
     private final ScheduledExecutorService scheduler;
 
-    public PeriodicSegmentWriter(Supplier<LogSegment> activeSegmentSupplier, Duration syncInterval) {
+    public PeriodicSegmentWriter(Supplier<LogSegment> activeSegmentSupplier, Duration interval) {
         super(activeSegmentSupplier);
 
-        this.syncInterval = syncInterval;
         this.scheduler = Executors.newSingleThreadScheduledExecutor(NamedThreadFactory.create("sync"));
         this.scheduler.scheduleAtFixedRate(() -> {
                     if (!closed.get()) {
@@ -28,8 +26,8 @@ public class PeriodicSegmentWriter extends SegmentWriter {
                         logger.trace("Synced active segment {}", activeSegment().name());
                     }
                 },
-                syncInterval.toMillis(),
-                syncInterval.toMillis(),
+                interval.toMillis(),
+                interval.toMillis(),
                 TimeUnit.MILLISECONDS
         );
     }

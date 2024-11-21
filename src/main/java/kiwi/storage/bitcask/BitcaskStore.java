@@ -280,7 +280,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
                         .sorted()
                         .toList();
 
-                ExecutorService executor = Executors.newFixedThreadPool(keyDirBuilderThreads, new NamedThreadFactory("keydir"));
+                ExecutorService executor = Executors.newFixedThreadPool(keyDirBuilderThreads, NamedThreadFactory.create("keydir"));
                 List<Future<KeyValue<Path, Map<Bytes, ValueReference>>>> futures = new ArrayList<>();
 
                 for (Path segmentPath : segmentPaths) {
