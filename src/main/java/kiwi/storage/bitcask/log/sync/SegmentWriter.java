@@ -1,4 +1,4 @@
-package kiwi.storage.bitcask.sync;
+package kiwi.storage.bitcask.log.sync;
 
 import kiwi.error.KiwiWriteException;
 import kiwi.storage.bitcask.log.LogSegment;
@@ -8,14 +8,24 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 public abstract class SegmentWriter implements AutoCloseable {
-    private final AtomicBoolean closed = new AtomicBoolean(false);
-    private final Supplier<LogSegment> activeSegmentSupplier;
+    protected final Supplier<LogSegment> activeSegmentSupplier;
+    protected final AtomicBoolean closed = new AtomicBoolean(false);
 
     public SegmentWriter(Supplier<LogSegment> activeSegmentSupplier) {
         this.activeSegmentSupplier = activeSegmentSupplier;
     }
 
-    abstract protected void append(Record record) throws KiwiWriteException;
+    /**
+     * Append a record to the active segment.
+     *
+     * <p>Implementations should ensure that the record is written to the underlying storage</p>
+     *
+     * @param record the record to append
+     * @throws KiwiWriteException if an error occurs while writing the record
+     */
+    public void append(Record record) throws KiwiWriteException {
+        activeSegment().append(record);
+    }
 
     protected void sync() {
         activeSegment().sync();

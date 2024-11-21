@@ -7,6 +7,10 @@ public class NamedThreadFactory implements ThreadFactory {
     private final String prefix;
     private final AtomicInteger threadNumber = new AtomicInteger(0);
 
+    public static NamedThreadFactory create(String prefix) {
+        return new NamedThreadFactory(prefix);
+    }
+
     public NamedThreadFactory(String prefix) {
         this.prefix = prefix;
     }
