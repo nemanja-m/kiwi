@@ -16,7 +16,7 @@ subprojects {
     apply(plugin = "java")
 
     dependencies {
-        implementation(rootProject.libs.slf4j)
+        implementation(rootProject.libs.slf4j.api)
         implementation(rootProject.libs.typesafe.config)
 
         testImplementation(platform(rootProject.libs.junit.bom))

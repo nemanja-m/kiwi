@@ -2,7 +2,6 @@ package kiwi.core.storage.bitcask;
 
 import kiwi.core.common.Bytes;
 import kiwi.core.common.KeyValue;
-import kiwi.core.storage.bitcask.BitcaskStore;
 import kiwi.core.storage.bitcask.log.Record;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
