@@ -1,37 +1,37 @@
 plugins {
-    application
+    java
     idea
 }
 
-group = "kiwi"
-version = "0.1.0-SNAPSHOT"
+allprojects {
+    group = "kiwi"
+    version = "0.1.0-SNAPSHOT"
 
-application {
-    mainClass = "kiwi.Kiwi"
+    repositories {
+        mavenCentral()
+    }
 }
 
-java {
-    sourceCompatibility = JavaVersion.VERSION_21
-}
+subprojects {
+    apply(plugin = "java")
 
-repositories {
-    mavenCentral()
-}
+    dependencies {
+        implementation(rootProject.libs.slf4j)
+        implementation(rootProject.libs.typesafe.config)
 
-dependencies {
-    implementation(libs.slf4j)
-    implementation(libs.logback)
-    implementation(libs.typesafe.config)
-    implementation(libs.zero.allocation.hashing)
+        testImplementation(platform(rootProject.libs.junit.bom))
+        testImplementation(rootProject.libs.junit.jupiter)
+        testRuntimeOnly(rootProject.libs.junit.platform)
+    }
 
-    testImplementation(platform(libs.junit.bom))
-    testImplementation(libs.junit.jupiter)
-    testRuntimeOnly(libs.junit.platform)
-}
+    java {
+        sourceCompatibility = JavaVersion.VERSION_21
+    }
 
-tasks.test {
-    useJUnitPlatform()
-    testLogging {
-        events("passed", "skipped", "failed")
+    tasks.test {
+        useJUnitPlatform()
+        testLogging {
+            events("passed", "skipped", "failed")
+        }
     }
 }
