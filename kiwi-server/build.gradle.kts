@@ -1,3 +1,11 @@
+plugins {
+    application
+}
+
+application {
+    mainClass.set("kiwi.server.resp.Server")
+}
+
 dependencies {
     implementation(project(":kiwi-core"))
 
