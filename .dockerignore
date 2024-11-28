@@ -1,0 +1,18 @@
+# Ignore Gradle build files
+.gradle/
+build/
+
+# Ignore local configuration files
+**/out/
+**/build/
+**/.idea/
+**/*.iml
+**/.DS_Store
+
+# Ignore logs and temporary files
+*.log
+*.tmp
+*.swp
+
+# Ignore other unnecessary files
+Dockerfile
