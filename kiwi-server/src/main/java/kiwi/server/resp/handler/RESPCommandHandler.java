@@ -3,7 +3,7 @@ package kiwi.server.resp.handler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import kiwi.core.common.Bytes;
-import kiwi.core.storage.bitcask.BitcaskStore;
+import kiwi.core.storage.KeyValueStore;
 import kiwi.server.resp.command.RESPCommand;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,9 +13,9 @@ import java.nio.charset.StandardCharsets;
 public class RESPCommandHandler extends SimpleChannelInboundHandler<RESPCommand> {
     private static final Logger logger = LoggerFactory.getLogger(RESPCommandHandler.class);
 
-    private final BitcaskStore db;
+    private final KeyValueStore<Bytes, Bytes> db;
 
-    public RESPCommandHandler(BitcaskStore db) {
+    public RESPCommandHandler(KeyValueStore<Bytes, Bytes> db) {
         this.db = db;
     }
 

@@ -9,6 +9,8 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import kiwi.core.common.Bytes;
+import kiwi.core.storage.KeyValueStore;
 import kiwi.core.storage.bitcask.BitcaskStore;
 import kiwi.server.config.Options;
 import kiwi.server.resp.codec.RESPDecoder;
@@ -58,9 +60,9 @@ public class Server {
     }
 
     static class ServerInitializer extends ChannelInitializer<SocketChannel> {
-        private final BitcaskStore db;
+        private final KeyValueStore<Bytes, Bytes> db;
 
-        public ServerInitializer(BitcaskStore db) {
+        public ServerInitializer(KeyValueStore<Bytes, Bytes> db) {
             this.db = db;
         }
 
