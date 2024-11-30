@@ -75,9 +75,9 @@ for simplicity, reliability, and blazing-fast read/write operations.
    git clone https://github.com/nemanjam/kiwi.git
    cd kiwi
    ```
-2. Build the project:
+2. Build & install the project:
    ```bash
-   ./gradlew assembleDist installDist
+   ./gradlew installDist
    ```
 3. Run the KiWi server:
    ```bash

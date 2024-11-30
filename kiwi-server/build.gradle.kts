@@ -4,6 +4,14 @@ plugins {
 
 application {
     mainClass.set("kiwi.server.resp.Server")
+
+    applicationDefaultJvmArgs = listOf(
+        "-Xms2g",
+        "-Xmx2g",
+        "-XX:+AlwaysPreTouch",
+        "-XX:+UseG1GC",
+        "-XX:+UseStringDeduplication",
+    )
 }
 
 dependencies {

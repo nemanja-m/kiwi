@@ -4,7 +4,7 @@ COPY --chown=gradle:gradle . /home/gradle/src
 
 WORKDIR /home/gradle/src
 
-RUN gradle kiwi-server:clean kiwi-server:assembleDist kiwi-server:installDist --no-daemon
+RUN gradle kiwi-server:installDist --no-daemon
 
 FROM eclipse-temurin:21-alpine
 
@@ -14,6 +14,6 @@ WORKDIR /app
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 CMD nc -z localhost 6379 || exit 1
 
-COPY --from=build /home/gradle/src/kiwi-server/build/install/kiwi-server/ /app/kiwi-server/
+COPY --from=build /home/gradle/src/kiwi-server/build/install/kiwi-server/ /app/
 
-CMD ["/app/kiwi-server/bin/kiwi-server"]
+CMD ["/app/bin/kiwi-server"]
