@@ -32,6 +32,7 @@ public class RESPCommandHandler extends SimpleChannelInboundHandler<RESPCommand>
             case DEL -> handleDelete(ctx, command);
             case EXISTS -> handleExists(ctx, command);
             case DBSIZE -> handleSize(ctx, command);
+            case FLUSHDB -> handleFlush(ctx, command);
             case UNKNOWN -> handleUnknown(ctx, command);
         }
     }
@@ -116,6 +117,11 @@ public class RESPCommandHandler extends SimpleChannelInboundHandler<RESPCommand>
     private void handleSize(ChannelHandlerContext ctx, RESPCommand ignoredCommand) {
         long size = db.size();
         ctx.writeAndFlush(size);
+    }
+
+    private void handleFlush(ChannelHandlerContext ctx, RESPCommand ignoredCommand) {
+        db.purge();
+        ctx.writeAndFlush("OK");
     }
 
     private void handleUnknown(ChannelHandlerContext ctx, RESPCommand command) {

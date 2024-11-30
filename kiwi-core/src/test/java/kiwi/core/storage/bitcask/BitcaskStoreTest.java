@@ -156,6 +156,21 @@ class BitcaskStoreTest {
     }
 
     @Test
+    void testPurge() {
+        BitcaskStore store = BitcaskStore.open(root);
+        store.put(Bytes.wrap("k1"), Bytes.wrap("v1"));
+        store.put(Bytes.wrap("k2"), Bytes.wrap("v2"));
+        store.put(Bytes.wrap("k3"), Bytes.wrap("v3"));
+        store.delete(Bytes.wrap("k1"));
+
+        assertEquals(2, store.size());
+
+        store.purge();
+
+        assertEquals(0, store.size());
+    }
+
+    @Test
     void testFileClose() throws IOException {
         FileChannel channel = FileChannel.open(root.resolve("test.log"), StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE);
         ByteBuffer src = ByteBuffer.wrap("Hello, World!".getBytes());

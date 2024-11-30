@@ -14,4 +14,6 @@ public interface KeyValueStore<K, V> extends AutoCloseable {
     boolean contains(K key);
 
     int size();
+
+    void purge();
 }

@@ -11,5 +11,6 @@ public enum CommandType {
     DEL,
     EXISTS,
     DBSIZE,
+    FLUSHDB,
     UNKNOWN,
 }

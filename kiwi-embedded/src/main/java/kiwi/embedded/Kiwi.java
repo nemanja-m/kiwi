@@ -59,6 +59,11 @@ public class Kiwi implements KeyValueStore<Bytes, Bytes> {
     }
 
     @Override
+    public void purge() {
+        store.purge();
+    }
+
+    @Override
     public void close() throws Exception {
         store.close();
     }

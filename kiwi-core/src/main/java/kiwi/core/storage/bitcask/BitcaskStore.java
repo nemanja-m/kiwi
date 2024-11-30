@@ -154,14 +154,19 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         return keyDir.size();
     }
 
-    private Supplier<LogSegment> activeSegmentSupplier() {
-        return () -> activeSegment;
+    @Override
+    public void purge() {
+        keyDir.keys().asIterator().forEachRemaining(this::delete);
     }
 
     @Override
     public void close() {
         logCleaner.close();
         writer.close();
+    }
+
+    private Supplier<LogSegment> activeSegmentSupplier() {
+        return () -> activeSegment;
     }
 
     public static Builder Builder() {
