@@ -56,8 +56,8 @@ public class RESPCommandHandler extends SimpleChannelInboundHandler<RESPCommand>
     }
 
     private void handleCommand(ChannelHandlerContext ctx, RESPCommand ignoredCommand) {
-        // COMMAND DOCS is not supported yet, so we always return OK.
-        ctx.writeAndFlush("OK");
+        // COMMAND DOCS is not supported yet, so we always return empty array.
+        ctx.writeAndFlush(new String[0]);
     }
 
     private void handleConfig(ChannelHandlerContext ctx, RESPCommand command) {

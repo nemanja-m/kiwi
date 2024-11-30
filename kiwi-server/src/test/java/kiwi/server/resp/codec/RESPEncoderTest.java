@@ -7,6 +7,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -59,6 +62,24 @@ class RESPEncoderTest {
         channel.flush();
         ByteBuf encoded = channel.readOutbound();
         assertEquals("*2\r\n$5\r\nHello\r\n$5\r\nWorld\r\n", encoded.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void testEncodeList() {
+        List<List<byte[]>> messages = List.of(List.of("Hello".getBytes()), List.of("World".getBytes()));
+        channel.writeOutbound(messages);
+        ByteBuf encoded = channel.readOutbound();
+        assertEquals("*2\r\n*1\r\n$5\r\nHello\r\n*1\r\n$5\r\nWorld\r\n", encoded.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void testEncodeMap() {
+        Map<String, String> map = new HashMap<>();
+        map.put("key1", "value1");
+        map.put("key2", "value2");
+        channel.writeOutbound(map);
+        ByteBuf encoded = channel.readOutbound();
+        assertEquals("*4\r\n$4\r\nkey1\r\n$6\r\nvalue1\r\n$4\r\nkey2\r\n$6\r\nvalue2\r\n", encoded.toString(StandardCharsets.UTF_8));
     }
 
     @Test
