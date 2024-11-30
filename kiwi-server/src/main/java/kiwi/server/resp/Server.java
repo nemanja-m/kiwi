@@ -10,41 +10,44 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import kiwi.core.storage.bitcask.BitcaskStore;
+import kiwi.server.config.Options;
 import kiwi.server.resp.codec.RESPDecoder;
 import kiwi.server.resp.codec.RESPEncoder;
+import kiwi.server.resp.config.ServerConfig;
 import kiwi.server.resp.handler.RESPCommandHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.file.Paths;
-
 public class Server {
     private static final Logger logger = LoggerFactory.getLogger(Server.class);
 
-    private static final int BUFFER_SIZE = 1024 * 1024;
+    private final ServerConfig config;
 
-    public static void main(String[] args) throws InterruptedException {
+    public Server() {
+        this(Options.defaults.server);
+    }
+
+    public Server(ServerConfig config) {
+        this.config = config;
+    }
+
+    public void start() throws InterruptedException {
         EventLoopGroup bossGroup = new NioEventLoopGroup();
         EventLoopGroup workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2);
 
-        try (BitcaskStore db = BitcaskStore.open(Paths.get("local/db"))) {
+        try (BitcaskStore db = BitcaskStore.open()) {
             ServerBootstrap bootstrap = new ServerBootstrap();
             bootstrap.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
                     .childHandler(new ServerInitializer(db))
                     .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                     .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                    .childOption(ChannelOption.SO_RCVBUF, BUFFER_SIZE)
-                    .childOption(ChannelOption.SO_SNDBUF, BUFFER_SIZE)
                     .childOption(ChannelOption.SO_KEEPALIVE, true)
                     .childOption(ChannelOption.TCP_NODELAY, true);
 
-            String host = "0.0.0.0";
-            int port = 6379;
+            ChannelFuture future = bootstrap.bind(config.host, config.port).sync();
 
-            ChannelFuture future = bootstrap.bind(host, port).sync();
-
-            logger.info("Listening at {}:{}", host, port);
+            logger.info("Listening at {}:{}", config.host, config.port);
 
             // Wait until the server socket is closed.
             future.channel().closeFuture().sync();
@@ -70,5 +73,10 @@ public class Server {
             ch.pipeline().addLast("encoder", new RESPEncoder());
             ch.pipeline().addLast("command", new RESPCommandHandler(db));
         }
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+        Server server = new Server();
+        server.start();
     }
 }

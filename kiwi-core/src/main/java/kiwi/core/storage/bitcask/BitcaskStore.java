@@ -7,13 +7,13 @@ import kiwi.core.config.Options;
 import kiwi.core.error.KiwiException;
 import kiwi.core.error.KiwiReadException;
 import kiwi.core.storage.KeyValueStore;
+import kiwi.core.storage.bitcask.log.LogCleaner;
 import kiwi.core.storage.bitcask.log.LogSegment;
 import kiwi.core.storage.bitcask.log.LogSegmentNameGenerator;
 import kiwi.core.storage.bitcask.log.Record;
 import kiwi.core.storage.bitcask.log.sync.SegmentWriter;
 import kiwi.core.storage.bitcask.log.sync.SegmentWriterFactory;
 import kiwi.core.storage.config.StorageConfig;
-import kiwi.core.storage.bitcask.log.LogCleaner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -188,7 +188,7 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
         private Duration compactionInterval;
         private double minDirtyRatio;
         private int compactionThreads;
-        private SegmentWriterFactory writerFactory;
+        private final SegmentWriterFactory writerFactory;
 
         Builder() {
             this(Options.defaults.storage);

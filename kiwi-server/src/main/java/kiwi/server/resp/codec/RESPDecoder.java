@@ -34,7 +34,7 @@ public class RESPDecoder extends ReplayingDecoder<RESPDecoder.State> {
                 if (firstChar != '*') {
                     throw new IllegalArgumentException("Invalid RESP message: expected '*' as first char, got '" + firstChar + "'");
                 }
-               
+
                 arguments = new ArrayDeque<>();
 
                 checkpoint(State.READ_COMMAND);
