@@ -23,32 +23,32 @@ for simplicity, reliability, and blazing-fast read/write operations.
 ## Quick Start
 
 1. Start Docker container
-   ```bash
-   docker run --rm --name kiwi -p 6379:6379 nemanjam/kiwi:latest
-   ```
+    ```bash
+    docker run --name kiwi -p 6379:6379 -v ./local/db:/var/lib/kiwi/data nemanjam/kiwi:latest
+    ```
 
 2. Connect to the server with `redis-cli`
-   ```bash
-   redis-cli -h localhost
-   ```
+    ```bash
+    redis-cli -h localhost
+    ```
 
 3. Use the server as you would a Redis server.
-   ```text
-   SET key value
-   OK
+    ```text
+    SET key value
+    OK
 
-   GET key
-   "value"
+    GET key
+    "value"
 
-   EXISTS key
-   (integer) 1
+    EXISTS key
+    (integer) 1
 
-   DEL key
-   OK
+    DEL key
+    OK
 
-   EXISTS key
-   (integer) 0
-   ```
+    EXISTS key
+    (integer) 0
+    ```
 
 ### Supported Commands
 
@@ -61,6 +61,16 @@ for simplicity, reliability, and blazing-fast read/write operations.
 - `DBSIZE`
 - `INFO`
 
+## Configuration
+
+KiWi can be configured using environment variables or a HOCON configuration file.
+Refer to [Typesafe Config](https://github.com/lightbend/config) for configuration examples.
+
+Default values and environment variables:
+
+- [kiwi-core/application.conf](kiwi-core/src/main/resources/application.conf)
+- [kiwi-server/application.conf](kiwi-server/src/main/resources/application.conf)
+
 ## Installation
 
 ### Prerequisites
@@ -71,43 +81,33 @@ for simplicity, reliability, and blazing-fast read/write operations.
 ### From Source
 
 1. Clone the repository:
-   ```bash
-   git clone https://github.com/nemanjam/kiwi.git
-   cd kiwi
-   ```
+    ```bash
+    git clone https://github.com/nemanjam/kiwi.git
+    cd kiwi
+    ```
 2. Build & install the project:
-   ```bash
-   ./gradlew installDist
-   ```
+    ```bash
+    ./gradlew installDist
+    ```
 3. Run the KiWi server:
-   ```bash
-   ./kiwi-server/build/install/kiwi-server/bin/kiwi-server
-   ```
+    ```bash
+    ./kiwi-server/build/install/kiwi-server/bin/kiwi-server
+    ```
 
 ### Docker
 
 1. Build the Docker image
-   ```bash
-   docker build -t kiwi .
-   ```
+    ```bash
+    docker build -t kiwi .
+    ```
 2. Run the container:
-   ```bash
+    ```bash
     docker run --rm --name kiwi -p 6379:6379 kiwi:latest
-   ```
+    ```
 3. Connect to the server:
     ```bash
     redis-cli -h localhost -p 6379
     ```
-
-## Configuration
-
-KiWi can be configured using environment variables or a HOCON configuration file.
-Refer to [Typesafe Config](https://github.com/lightbend/config) for configuration examples.
-
-Default values are:
-
-- Storage [application.conf](kiwi-core/src/main/resources/application.conf)
-- Server [application.conf](kiwi-server/src/main/resources/application.conf)
 
 ## Benchmarks
 
