@@ -7,11 +7,12 @@ import kiwi.server.resp.command.CommandType;
 import kiwi.server.resp.command.RESPCommand;
 
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.List;
 
 public class RESPDecoder extends ReplayingDecoder<RESPDecoder.State> {
-    private List<String> arguments;
+    private Deque<String> arguments;
 
     enum State {
         READ_INITIAL,
@@ -27,10 +28,15 @@ public class RESPDecoder extends ReplayingDecoder<RESPDecoder.State> {
         switch (state()) {
             case READ_INITIAL -> {
                 char firstChar = (char) in.readByte();
+                if (firstChar == '\n' || firstChar == '\r') {
+                    return;
+                }
                 if (firstChar != '*') {
                     throw new IllegalArgumentException("Invalid RESP message: expected '*' as first char, got '" + firstChar + "'");
                 }
-                arguments = new ArrayList<>();
+               
+                arguments = new ArrayDeque<>();
+
                 checkpoint(State.READ_COMMAND);
             }
             case READ_COMMAND -> {
@@ -46,7 +52,7 @@ public class RESPDecoder extends ReplayingDecoder<RESPDecoder.State> {
                 String rawCommand = arguments.removeFirst().toUpperCase();
                 CommandType commandType = parseCommandType(rawCommand);
 
-                RESPCommand command = new RESPCommand(commandType, arguments);
+                RESPCommand command = new RESPCommand(commandType, arguments.stream().toList());
                 out.add(command);
 
                 checkpoint(State.READ_INITIAL);
