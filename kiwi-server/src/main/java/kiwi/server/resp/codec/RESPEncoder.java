@@ -37,7 +37,7 @@ public class RESPEncoder extends MessageToByteEncoder<Object> {
             out.writeBytes("$-1\r\n".getBytes(StandardCharsets.UTF_8));
         } else {
             out.writeByte('$');
-            out.writeCharSequence(String.valueOf(msg.length), java.nio.charset.StandardCharsets.UTF_8);
+            out.writeCharSequence(String.valueOf(msg.length), StandardCharsets.UTF_8);
             out.writeBytes("\r\n".getBytes(StandardCharsets.UTF_8));
             out.writeBytes(msg);
             out.writeBytes("\r\n".getBytes(StandardCharsets.UTF_8));
@@ -46,16 +46,20 @@ public class RESPEncoder extends MessageToByteEncoder<Object> {
 
     private void encodeArray(String[] msg, ByteBuf out) {
         out.writeByte('*');
-        out.writeCharSequence(String.valueOf(msg.length), java.nio.charset.StandardCharsets.UTF_8);
+        out.writeCharSequence(String.valueOf(msg.length), StandardCharsets.UTF_8);
         out.writeBytes("\r\n".getBytes(StandardCharsets.UTF_8));
         for (String element : msg) {
-            encodeBulkString(element != null ? element.getBytes(StandardCharsets.UTF_8) : null, out);
+            if (element == null) {
+                encodeBulkString(new byte[0], out);
+            } else {
+                encodeBulkString(element.getBytes(StandardCharsets.UTF_8), out);
+            }
         }
     }
 
     private void encodeError(Throwable error, ByteBuf out) {
         out.writeByte('-');
-        out.writeCharSequence("ERR " + error.getMessage(), java.nio.charset.StandardCharsets.UTF_8);
+        out.writeCharSequence("ERR " + error.getMessage(), StandardCharsets.UTF_8);
         out.writeBytes("\r\n".getBytes(StandardCharsets.UTF_8));
     }
 }
