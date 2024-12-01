@@ -109,6 +109,31 @@ Default values and environment variables:
     redis-cli -h localhost -p 6379
     ```
 
+## Checksums
+
+KiWi uses CRC32 checksums to ensure data integrity. The checksum is stored alongside the data.
+There is a special command that can be used to verify the data integrity.
+
+Checksum command uses available CPU cores to parallelize the checksum calculation. If checksum
+fails,
+the following error message will be displayed:
+
+```text
+Checksum failed: segment=00000000000000000000 position=444636640 checksum=2005447726 timestamp=1733002903067 ttl=0 keySize=16 valueSize=0
+```
+
+### Docker
+
+```bash
+docker run -it --rm -p 6379:6379 nemanjam/kiwi:latest sh checksum --dir [log dir] --threads [threads]
+```
+
+### Java
+
+```bash
+java -cp "kiwi-server/build/install/kiwi-server/lib/*" kiwi.core.checksum.Run --dir [log dir] --threads [threads]
+```
+
 ## Benchmarks
 
 KiWi can be evaluated with [redis-benchmark](https://redis.io/topics/benchmarks) utility command.

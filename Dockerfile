@@ -16,4 +16,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 CMD nc -z
 
 COPY --from=build /home/gradle/src/kiwi-server/build/install/kiwi-server/ /app/
 
+RUN echo -e '#!/bin/sh\njava -cp "/app/lib/*" kiwi.core.checksum.Run "$@"' > /app/checksum && chmod +x /app/checksum
+
 CMD ["/app/bin/kiwi-server"]

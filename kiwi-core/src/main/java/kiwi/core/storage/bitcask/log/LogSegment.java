@@ -222,6 +222,10 @@ public class LogSegment {
         return (double) dirtyCount / total;
     }
 
+    public Iterable<Record> getRecords() {
+        return () -> new RecordIterator(channel, keyHeader -> true);
+    }
+
     public Iterable<Record> getActiveRecords(Map<Bytes, Long> keyTimestampMap) {
         return () -> new RecordIterator(channel, keyHeader -> isActiveRecord(keyHeader, keyTimestampMap));
     }

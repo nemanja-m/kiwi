@@ -16,9 +16,11 @@ public class Utils {
     private static final Logger logger = LoggerFactory.getLogger(Utils.class);
 
     public static long checksum(long timestamp, long ttl, Bytes key, Bytes value) {
-        ByteBuffer buffer = ByteBuffer.allocate(2 * Long.BYTES + key.size() + value.size());
+        ByteBuffer buffer = ByteBuffer.allocate(2 * (Long.BYTES + Integer.BYTES) + key.size() + value.size());
         buffer.putLong(timestamp);
         buffer.putLong(ttl);
+        buffer.putInt(key.size());
+        buffer.putInt(value.size());
         buffer.put(key.get());
         buffer.put(value.get());
         CRC32 crc = new CRC32();
