@@ -74,13 +74,34 @@ public class RESPCommandHandler extends SimpleChannelInboundHandler<RESPCommand>
     }
 
     private void handleSet(ChannelHandlerContext ctx, RESPCommand command) {
-        if (command.arguments().size() != 2) {
-            ctx.writeAndFlush(new Throwable("SET requires 2 arguments"));
+        int argSize = command.arguments().size();
+
+        if (argSize < 2) {
+            ctx.writeAndFlush(new Throwable("SET requires at lest 2 arguments: SET [key] [value]"));
             return;
         }
-        Bytes key = Bytes.wrap(command.arguments().getFirst().getBytes(StandardCharsets.UTF_8));
-        Bytes value = Bytes.wrap(command.arguments().getLast().getBytes(StandardCharsets.UTF_8));
-        db.put(key, value);
+
+        Bytes key = Bytes.wrap(command.arguments().get(0).getBytes(StandardCharsets.UTF_8));
+        Bytes value = Bytes.wrap(command.arguments().get(1).getBytes(StandardCharsets.UTF_8));
+
+        if (argSize == 2) {
+            db.put(key, value);
+        } else if (argSize == 4) {
+            String expiryArg = command.arguments().get(2).toUpperCase();
+            long ttl = System.currentTimeMillis();
+            switch (expiryArg) {
+                case "EX" -> ttl += Long.parseLong(command.arguments().get(3)) * 1000;
+                case "PX" -> ttl += Long.parseLong(command.arguments().get(3));
+                default -> {
+                    ctx.writeAndFlush(new Throwable("SET requires EX or PX as expiry"));
+                    return;
+                }
+            }
+            db.put(key, value, ttl);
+        } else {
+            ctx.writeAndFlush(new Throwable("Expected SET syntax: SET [key] [value] [EX|PX] [time]"));
+            return;
+        }
         ctx.writeAndFlush("OK");
     }
 
