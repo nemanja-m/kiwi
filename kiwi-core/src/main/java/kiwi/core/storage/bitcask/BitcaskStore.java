@@ -121,7 +121,8 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
     @Override
     public void put(Bytes key, Bytes value, long ttl) {
         Objects.requireNonNull(key, "key cannot be null");
-        Record record = Record.of(key, value, clock.millis(), ttl);
+        long now = clock.millis();
+        Record record = Record.of(key, value, now, now + ttl);
         int written = writer.append(record);
         if (written > 0) {
             keyDir.update(record, activeSegment);

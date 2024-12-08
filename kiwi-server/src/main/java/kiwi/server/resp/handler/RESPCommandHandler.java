@@ -88,10 +88,10 @@ public class RESPCommandHandler extends SimpleChannelInboundHandler<RESPCommand>
             db.put(key, value);
         } else if (argSize == 4) {
             String expiryArg = command.arguments().get(2).toUpperCase();
-            long ttl = System.currentTimeMillis();
+            long ttl;
             switch (expiryArg) {
-                case "EX" -> ttl += Long.parseLong(command.arguments().get(3)) * 1000;
-                case "PX" -> ttl += Long.parseLong(command.arguments().get(3));
+                case "EX" -> ttl = Long.parseLong(command.arguments().get(3)) * 1000;
+                case "PX" -> ttl = Long.parseLong(command.arguments().get(3));
                 default -> {
                     ctx.writeAndFlush(new Throwable("SET requires EX or PX as expiry"));
                     return;
