@@ -27,6 +27,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
@@ -40,6 +42,8 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
     private final LogSegmentNameGenerator segmentNameGenerator;
     private final LogCleaner logCleaner;
     private final SegmentWriter writer;
+
+    private final ReadWriteLock rw = new ReentrantReadWriteLock();
 
     private BitcaskStore(
             Path logDir,
@@ -122,21 +126,38 @@ public class BitcaskStore implements KeyValueStore<Bytes, Bytes> {
     public void put(Bytes key, Bytes value, long ttl) {
         Objects.requireNonNull(key, "key cannot be null");
         long now = clock.millis();
-        Record record = Record.of(key, value, now, now + ttl);
-        int written = writer.append(record);
-        if (written > 0) {
-            keyDir.update(record, activeSegment);
-        } else {
-            throw new KiwiException("Failed to write to segment");
+        Record record = Record.of(key, value, now, ttl != 0 ? now + ttl : 0);
+
+        rw.readLock().lock();
+        try {
+            int written = writer.append(record);
+            if (written > 0) {
+                keyDir.update(record, activeSegment);
+            } else {
+                throw new KiwiException("Failed to write to segment");
+            }
+        } finally {
+            rw.readLock().unlock();
         }
+
         maybeRollSegment();
     }
 
-    private synchronized void maybeRollSegment() {
+    private void maybeRollSegment() {
+        // Optimistic check to avoid acquiring lock.
         if (shouldRoll()) {
-            activeSegment.markAsReadOnly();
-            activeSegment = LogSegment.open(segmentNameGenerator.next());
-            logger.info("Opened new log segment {}", activeSegment.name());
+            rw.writeLock().lock();
+            try {
+                // We need to check again after acquiring lock to prevent
+                // because multiple threads can enter maybeRollSegment and pass first optimistic check.
+                if (shouldRoll()) {
+                    activeSegment.markAsReadOnly();
+                    activeSegment = LogSegment.open(segmentNameGenerator.next());
+                    logger.info("Opened new log segment {}", activeSegment.name());
+                }
+            } finally {
+                rw.writeLock().unlock();
+            }
         }
     }
 
